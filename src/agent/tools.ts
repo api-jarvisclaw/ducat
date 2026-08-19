@@ -12,8 +12,17 @@
  */
 import type { PlatformClient, ToolSchema } from '../platform/client.js'
 
-/** Whether a tool spends money, so the runner knows when to ask. */
-export type ToolCost = 'free' | 'paid'
+/**
+ * What a tool costs, which decides whether the runner asks first.
+ *
+ * `free` — reachable with no credential at all.
+ * `credentialed` — free of charge, but the gateway answers 402 without a
+ *   credential, so it is unusable anonymously. Not prompted for (there is no price
+ *   to approve) but excluded from the anonymous tool set, because offering it would
+ *   send the agent into a 402 it cannot act on.
+ * `paid` — spends money per call; always confirmed with a live price.
+ */
+export type ToolCost = 'free' | 'credentialed' | 'paid'
 
 /** Asked before a paid call. Returning false cancels it. */
 export type ConfirmFn = (request: {
@@ -243,30 +252,47 @@ export const tools: Record<string, Tool> = {
   },
 
   resolve_intent: {
-    cost: 'free',
+    // Not free: /v1/intent/resolve answers 402 to a caller with no credential, and
+    // it prices on the model in the payload — a paid model there is quoted at that
+    // model's price, and naming no model at all lands on the gateway's flat $0.045
+    // fallback. With a credential and a free model it costs nothing, which is what
+    // this tool sends.
+    cost: 'credentialed',
     schema: {
       type: 'function',
       function: {
         name: 'resolve_intent',
         description:
-          'Describe a task in plain language and get back which providers can do it, ranked, with prices — without executing anything. Free. Useful when you know the goal but not which API serves it.',
+          'Given an intent type, list the providers that can serve it, ranked, with prices — without executing anything. Free with a credential. Call aip_list_intents first if unsure which intent type applies; an unknown one is rejected.',
         parameters: {
           type: 'object',
           properties: {
-            query: {
+            intent: {
               type: 'string',
-              description: 'The task, in plain language.',
+              description:
+                "The intent type, e.g. 'chat_completion', 'image_generation', 'web_search'. Required by the gateway — a plain-language description alone is rejected.",
+            },
+            model: {
+              type: 'string',
+              description:
+                'Optional model to resolve against. Leave it out unless the user named one: the gateway prices this call on the model given, so a paid model here makes the lookup itself cost that model\'s price.',
             },
           },
-          required: ['query'],
+          required: ['intent'],
         },
       },
     },
     async run(args, ctx) {
-      const query = String(args['query'] ?? '')
-      if (!query) return 'No query given.'
+      const intent = String(args['intent'] ?? '')
+      if (!intent) {
+        const types = await ctx.client.intentTypes()
+        return `No intent given. The gateway accepts: ${types.join(', ')}.`
+      }
 
-      const resolved = await ctx.client.resolveIntent(query)
+      const resolved = await ctx.client.resolveIntent({
+        intent,
+        ...(typeof args['model'] === 'string' ? { model: args['model'] } : {}),
+      })
       if (resolved.matches.length === 0) {
         return (
           `No provider matched (status: ${resolved.status}).` +
@@ -323,13 +349,15 @@ export const tools: Record<string, Tool> = {
   },
 
   check_balance: {
-    cost: 'free',
+    // /v1/wallet/balance answers 402 to a caller with no credential, so this is
+    // free of charge but not reachable anonymously.
+    cost: 'credentialed',
     schema: {
       type: 'function',
       function: {
         name: 'check_balance',
         description:
-          'Report the spendable balance in USD. Free. Worth checking before a run of paid calls, so the user is not surprised mid-task.',
+          'Report the spendable balance in USD. Free, but needs a credential. Worth checking before a run of paid calls, so the user is not surprised mid-task.',
         parameters: { type: 'object', properties: {} },
       },
     },
@@ -343,7 +371,15 @@ export const tools: Record<string, Tool> = {
   },
 }
 
-/** Every tool schema, to hand to the model. */
-export function toolSchemas(): ToolSchema[] {
-  return Object.values(tools).map((t) => t.schema)
+/**
+ * The tool schemas to hand to the model.
+ *
+ * Anonymous sessions get only the tools that work without a credential. Offering
+ * the rest would send the agent into a 402 it cannot pay and cannot act on, which
+ * reads to the user as the tool being broken rather than as needing a login.
+ */
+export function toolSchemas(opts: { anonymous?: boolean } = {}): ToolSchema[] {
+  return Object.values(tools)
+    .filter((t) => !opts.anonymous || t.cost === 'free')
+    .map((t) => t.schema)
 }

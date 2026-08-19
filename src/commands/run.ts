@@ -42,7 +42,7 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
   }
 
   try {
-    const result = await run(prompt, { client, model, confirm, log })
+    const result = await run(prompt, { client, model, confirm, log, ...(anonymous ? { anonymous: true } : {}) })
     if (!stopped) spin.stop()
 
     say()
@@ -59,7 +59,7 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
     return 0
   } catch (err) {
     if (!stopped) spin.stop()
-    return reportError(err)
+    return reportError(err, { anonymous })
   }
 }
 
@@ -100,7 +100,7 @@ export async function runInteractive(config: ResolvedConfig): Promise<number> {
       }
 
       try {
-        const result = await run(prompt, { client, model, confirm, log })
+        const result = await run(prompt, { client, model, confirm, log, ...(anonymous ? { anonymous: true } : {}) })
         if (!stopped) spin.stop()
         say()
         say(result.answer)
@@ -108,7 +108,7 @@ export async function runInteractive(config: ResolvedConfig): Promise<number> {
         say()
       } catch (err) {
         if (!stopped) spin.stop()
-        exitCode = reportError(err)
+        exitCode = reportError(err, { anonymous })
         // Out of funds ends the session; anything else is worth another turn.
         if (err instanceof InsufficientBalanceError) break
       } finally {
@@ -143,12 +143,19 @@ function announceAnonymous(requestedModel: string, actualModel: string): void {
  * The gateway's own message is always shown — a rewritten one hides the real cause —
  * with a line added about what to do next.
  */
-function reportError(err: unknown): number {
-  const { fail } = { fail: (t: string) => say(`${style.red('✗')} ${t}`) }
+function reportError(err: unknown, ctx: { anonymous: boolean } = { anonymous: false }): number {
+  const fail = (t: string) => say(`${style.red('✗')} ${t}`)
 
   if (err instanceof InsufficientBalanceError) {
     fail(err.message)
-    note('Top up the wallet, or switch to a free model with --model auto/free.')
+    // The advice has to match the situation. Telling someone already on auto/free
+    // to "switch to a free model" is the kind of dead end that makes a tool look
+    // broken — and with no credential there is no wallet to top up either.
+    note(
+      ctx.anonymous
+        ? 'That needs a credential. Run `jarvisclaw login` — free models work without one.'
+        : 'Top up the wallet, or switch to a free model with --model auto/free.',
+    )
     return 2
   }
   if (err instanceof JarvisClawError) {

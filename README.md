@@ -71,15 +71,22 @@ ids.
 | --- | --- | --- |
 | `search_apis` | free | search thousands of callable endpoints |
 | `get_api_detail` | free | one API's real spec, price and method |
-| `call_api` | **paid** | invoke it, after you approve the price |
 | `list_models` | free | what the gateway serves right now |
-| `resolve_intent` | free | describe a task, get ranked providers |
 | `discover_agents` | free | other agents, for delegating work |
-| `check_balance` | free | what is spendable |
+| `resolve_intent` | login | given an intent type, which providers serve it |
+| `check_balance` | login | what is spendable |
+| `call_api` | **paid** | invoke an API, after you approve the price |
 
 The agent chooses among these itself. Nothing in that list is hardcoded from a
 snapshot: model ids, categories, prices and specs are read from the gateway at call
 time, so the agent cannot act on a stale catalogue.
+
+The three columns are a real distinction, checked against the gateway rather than
+assumed. **free** works with no credential. **login** costs nothing but the gateway
+answers 402 without a credential, so those tools are withheld from an anonymous
+session entirely — offering them would send the agent into a payment error for
+something the user never asked to buy. **paid** spends money and is always
+confirmed.
 
 ## Spending
 

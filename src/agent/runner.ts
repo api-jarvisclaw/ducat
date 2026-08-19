@@ -20,6 +20,11 @@ export interface RunnerOptions {
   maxRounds?: number
   /** Extra context appended to the system prompt, e.g. what mode we are in. */
   systemSuffix?: string
+  /**
+   * No credential: offer only the tools that work without one, and tell the model
+   * why the others are missing so it can say so rather than guess.
+   */
+  anonymous?: boolean
 }
 
 export interface RunResult {
@@ -66,8 +71,21 @@ function systemPrompt(suffix?: string): string {
 /** Run one user request to completion. */
 export async function run(prompt: string, opts: RunnerOptions): Promise<RunResult> {
   const maxRounds = opts.maxRounds ?? DEFAULT_MAX_ROUNDS
+  const schemas = toolSchemas(opts.anonymous ? { anonymous: true } : {})
+  const suffix = [
+    opts.systemSuffix,
+    opts.anonymous
+      ? 'This session has no credential, so only the free tools are available. ' +
+        'Paid APIs, intent resolution and balance lookups need one — if the user ' +
+        'asks for those, say `jarvisclaw login` is needed rather than guessing at ' +
+        'an answer.'
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
   const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt(opts.systemSuffix) },
+    { role: 'system', content: systemPrompt(suffix || undefined) },
     { role: 'user', content: prompt },
   ]
 
@@ -78,7 +96,7 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
     const turn = await opts.client.chat({
       model: opts.model,
       messages,
-      tools: toolSchemas(),
+      tools: schemas,
     })
 
     if (turn.toolCalls.length === 0) {
@@ -147,9 +165,26 @@ async function runOneTool(
   try {
     return await tool.run(args, ctx)
   } catch (err) {
-    // Out of money is terminal for the session: every further paid attempt fails
-    // the same way, and looping on it wastes the user's time.
-    if (err instanceof InsufficientBalanceError) throw err
+    if (err instanceof InsufficientBalanceError) {
+      // A 402 from a tool the user was never asked to pay for is not the same
+      // condition as running out of funds mid-purchase. Several endpoints answer 402
+      // to a caller whose credential they do not accept, so aborting here killed the
+      // whole session — and told the user to "switch to a free model" when they were
+      // already on one. Report it to the model instead and let it route around.
+      //
+      // Keyed on "not paid" rather than "is free": a credentialed tool takes this
+      // path too, and that is exactly the case that was breaking sessions.
+      if (tool.cost !== 'paid') {
+        return (
+          `${call.name} is unavailable without a credential: the gateway wants ` +
+          `payment for it (${err.message}). Do not retry it. Use a different tool, ` +
+          `and tell the user this one needs \`jarvisclaw login\`.`
+        )
+      }
+      // On a genuinely paid tool the user did approve a charge, so being out of
+      // funds is terminal: every further attempt fails identically.
+      throw err
+    }
     if (err instanceof APIError) {
       return `${call.name} failed: ${err.message} (HTTP ${err.statusCode}). Do not retry this unchanged.`
     }

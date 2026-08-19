@@ -206,8 +206,18 @@ export class PlatformClient extends BaseClient {
     return data.intent_types ?? []
   }
 
-  /** Resolve a natural-language request to ranked providers, without executing it. */
-  async resolveIntent(query: string): Promise<{
+  /**
+   * List the providers that can serve an intent, ranked, without executing it.
+   *
+   * `intent` is required by the gateway — sending only a free-text query is a 400,
+   * and the x402 middleware runs first, so such a request is answered 402 at the
+   * flat fallback price before validation ever reports the missing field.
+   *
+   * The price of this lookup follows the model in the payload: a free model (or a
+   * credential with no model) costs nothing, while naming a paid model quotes that
+   * model's own price for the lookup. Nothing is sent unless the caller asked for it.
+   */
+  async resolveIntent(args: { intent: string; model?: string }): Promise<{
     status: string
     intent?: string
     message?: string
@@ -218,23 +228,38 @@ export class PlatformClient extends BaseClient {
       intent?: string
       message?: string
       matches?: Array<{
+        provider_id?: string
         provider_name?: string
         model?: string
         price_usd?: number
+        estimated_price_usd?: number
         score?: number
+        reason?: string
       }>
-    }>('/v1/intent/resolve', { body: { query } })
+    }>('/v1/intent/resolve', {
+      body: {
+        intent: args.intent,
+        ...(args.model ? { payload: { model: args.model } } : {}),
+      },
+    })
 
     return {
-      status: data.status ?? 'unknown',
+      status: data.status ?? 'resolved',
       ...(data.intent ? { intent: data.intent } : {}),
       ...(data.message ? { message: data.message } : {}),
-      matches: (data.matches ?? []).map((m) => ({
-        providerName: m.provider_name ?? '',
-        ...(m.model ? { model: m.model } : {}),
-        ...(m.price_usd === undefined ? {} : { priceUsd: m.price_usd }),
-        score: m.score ?? 0,
-      })),
+      matches: (data.matches ?? []).map((m) => {
+        // The live response uses provider_id and estimated_price_usd; the documented
+        // shape uses provider_name and price_usd. Both are read rather than assuming
+        // one, since a match rendered as an empty name is indistinguishable from no
+        // match at all.
+        const price = m.price_usd ?? m.estimated_price_usd
+        return {
+          providerName: m.provider_name ?? m.provider_id ?? '',
+          ...(m.model ? { model: m.model } : {}),
+          ...(price === undefined ? {} : { priceUsd: price }),
+          score: m.score ?? 0,
+        }
+      }),
     }
   }
 
