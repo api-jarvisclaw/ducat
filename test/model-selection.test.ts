@@ -15,13 +15,13 @@ import { DEFAULT_MODEL, FREE_MODEL, VIRTUAL_ROUTES, resolveConfig } from '../src
 import { buildRunClient } from '../src/platform/factory.js'
 import { setConfig } from '../src/commands/browse.js'
 
-const ENV_KEYS = ['DUCAT_MODEL', 'JARVISCLAW_MODEL', 'DUCAT_API_KEY', 'JARVISCLAW_API_KEY']
+const ENV_KEYS = ['JARVISCLAW_MODEL', 'JARVISCLAW_MODEL', 'JARVISCLAW_API_KEY', 'JARVISCLAW_API_KEY']
 
 let home: string
 let saved: Record<string, string | undefined>
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), 'ducat-model-'))
+  home = mkdtempSync(join(tmpdir(), 'jarvisclaw-model-'))
   // A real HOME would read the developer's own config into these assertions, and
   // `config set` would write to it. Same approach as test/config.test.ts.
   vi.stubEnv('HOME', home)
@@ -119,7 +119,7 @@ describe('choosing a paid model', () => {
   })
 
   it('accepts -m and --model, and lets the flag beat the environment', () => {
-    process.env['DUCAT_MODEL'] = 'from/env'
+    process.env['JARVISCLAW_MODEL'] = 'from/env'
     expect(parseArgs(['-m', 'from/flag', 'do a thing']).flags.model).toBe('from/flag')
     const config = resolveConfig({ model: 'from/flag' })
     expect(config.model).toBe('from/flag')
@@ -129,7 +129,7 @@ describe('choosing a paid model', () => {
 describe('config set', () => {
   it('persists a model as the default', async () => {
     expect(await setConfig(['model', 'auto/eco'])).toBe(0)
-    const stored = JSON.parse(readFileSync(join(home, '.ducat', 'config.json'), 'utf8'))
+    const stored = JSON.parse(readFileSync(join(home, '.jarvisclaw', 'config.json'), 'utf8'))
     expect(stored.model).toBe('auto/eco')
     expect(resolveConfig().model).toBe('auto/eco')
   })
@@ -150,7 +150,7 @@ describe('config set', () => {
   it('persists spend ceilings as numbers', async () => {
     expect(await setConfig(['max-call', '0.25'])).toBe(0)
     expect(await setConfig(['max-spend', '5'])).toBe(0)
-    const stored = JSON.parse(readFileSync(join(home, '.ducat', 'config.json'), 'utf8'))
+    const stored = JSON.parse(readFileSync(join(home, '.jarvisclaw', 'config.json'), 'utf8'))
     expect(stored.maxCallUsd).toBe(0.25)
     expect(stored.maxSpendUsd).toBe(5)
   })
@@ -175,7 +175,7 @@ describe('config set', () => {
     expect(await setConfig(['wallet-key', '0xdead'])).toBe(2)
     let contents = ''
     try {
-      contents = readFileSync(join(home, '.ducat', 'config.json'), 'utf8')
+      contents = readFileSync(join(home, '.jarvisclaw', 'config.json'), 'utf8')
     } catch {
       contents = ''
     }
@@ -192,7 +192,7 @@ describe('config set', () => {
   it('does not clobber other settings', async () => {
     await setConfig(['max-call', '0.5'])
     await setConfig(['model', 'auto/premium'])
-    const stored = JSON.parse(readFileSync(join(home, '.ducat', 'config.json'), 'utf8'))
+    const stored = JSON.parse(readFileSync(join(home, '.jarvisclaw', 'config.json'), 'utf8'))
     expect(stored.maxCallUsd).toBe(0.5)
     expect(stored.model).toBe('auto/premium')
   })

@@ -1,4 +1,4 @@
-/** `ducat wallet` — what the local wallet is, and how to fund it. */
+/** `jarvisclaw wallet` — what the local wallet is, and how to fund it. */
 import { loadWallet, walletIsWorldReadable, walletPath } from '../wallet.js'
 import { heading, note, say, style, warn } from '../ui.js'
 
@@ -6,7 +6,7 @@ export async function wallet(): Promise<number> {
   const stored = loadWallet()
   if (!stored) {
     say('No local wallet yet.')
-    note('Create one with `ducat setup`, or use an API key instead.')
+    note('Create one with `jarvisclaw setup`, or use an API key instead.')
     return 1
   }
 
@@ -29,7 +29,7 @@ export async function wallet(): Promise<number> {
   }
 
   say()
-  note('Balance:  ducat balance')
+  note('Balance:  jarvisclaw balance')
   // Stated on every viewing, not just at creation — this is the screen someone
   // returns to weeks later, having forgotten what kind of wallet it is.
   note('This is a hot wallet. Keep only what you are willing to spend here.')

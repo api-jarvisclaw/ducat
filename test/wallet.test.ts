@@ -7,7 +7,15 @@
  * per-call budget needs. A generated key that only ever holds what the user chose
  * to send it caps the damage before the agent starts.
  */
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,12 +27,16 @@ import {
   walletPath,
 } from '../src/wallet.js'
 
+/** A throwaway key and its address; never a real one. */
+const KEY = `0x${'11'.repeat(32)}`
+const ADDRESS = '0x19E7E376E7C213B7E7e7e46cc70A5dD086DAff2A'
+
 let home: string
 
 beforeEach(() => {
   // A real HOME would read the developer's own wallet, and saveWallet would
   // overwrite it — with funds in it.
-  home = mkdtempSync(join(tmpdir(), 'ducat-w-'))
+  home = mkdtempSync(join(tmpdir(), 'jarvisclaw-w-'))
   vi.stubEnv('HOME', home)
   vi.stubEnv('USERPROFILE', home)
 })
@@ -64,7 +76,7 @@ describe('getOrCreateWallet', () => {
     // Guards against a fixed or seeded key, which would make every install share
     // one wallet.
     const first = await getOrCreateWallet()
-    const other = mkdtempSync(join(tmpdir(), 'ducat-w2-'))
+    const other = mkdtempSync(join(tmpdir(), 'jarvisclaw-w2-'))
     try {
       vi.stubEnv('HOME', other)
       vi.stubEnv('USERPROFILE', other)
@@ -75,10 +87,10 @@ describe('getOrCreateWallet', () => {
     }
   })
 
-  it('writes the key where `ducat wallet` reports it', async () => {
+  it('writes the key where `jarvisclaw wallet` reports it', async () => {
     await getOrCreateWallet()
     expect(existsSync(walletPath())).toBe(true)
-    expect(walletPath()).toContain('.ducat')
+    expect(walletPath()).toContain('.jarvisclaw')
   })
 
   it('stores the key owner-only', async () => {
@@ -146,5 +158,49 @@ describe('assertNoWalletToOverwrite', () => {
       // expected
     }
     expect(readFileSync(walletPath(), 'utf8')).toBe('{ corrupt')
+  })
+})
+
+/**
+ * `~/.jarvisclaw/` is shared with the Python SDK, which writes cost_log.jsonl and a
+ * cache/ directory there. That is the usual one-directory-per-brand convention, but
+ * it means this code has neighbours it did not create — and the file it owns holds a
+ * private key, so a directory-level operation would be destroying someone else's
+ * data or their funds.
+ */
+describe('the shared config directory', () => {
+  it('does not disturb files it did not create', () => {
+    const dir = join(home, '.jarvisclaw')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'cost_log.jsonl'), '{"from":"the python sdk"}\n')
+    mkdirSync(join(dir, 'cache'), { recursive: true })
+
+    saveWallet({ privateKey: KEY, address: ADDRESS, createdAt: 1 })
+
+    expect(readFileSync(join(dir, 'cost_log.jsonl'), 'utf8')).toContain('python sdk')
+    expect(existsSync(join(dir, 'cache'))).toBe(true)
+  })
+
+  it('accepts a directory that already exists with other permissions', () => {
+    // The Python SDK creates it with whatever mode it likes. Failing here would mean
+    // the CLI cannot store a wallet on a machine that already used the SDK.
+    const dir = join(home, '.jarvisclaw')
+    mkdirSync(dir, { recursive: true, mode: 0o755 })
+
+    expect(() => saveWallet({ privateKey: KEY, address: ADDRESS, createdAt: 1 })).not.toThrow()
+    expect(loadWallet()?.address).toBe(ADDRESS)
+  })
+
+  it('removes only its own file, never the directory', () => {
+    const dir = join(home, '.jarvisclaw')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'cost_log.jsonl'), 'x\n')
+    saveWallet({ privateKey: KEY, address: ADDRESS, createdAt: 1 })
+
+    rmSync(walletPath(), { force: true })
+
+    expect(existsSync(walletPath())).toBe(false)
+    expect(existsSync(dir)).toBe(true)
+    expect(existsSync(join(dir, 'cost_log.jsonl'))).toBe(true)
   })
 })

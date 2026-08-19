@@ -10,7 +10,7 @@ import { buildAnonymousClient, buildClient } from '../platform/factory.js'
 import type { ModelInfo } from '../platform/client.js'
 import { formatPrice, formatUsd, heading, note, say, spinner, style, warn } from '../ui.js'
 
-/** `ducat search <query>` — browse the catalogue. */
+/** `jarvisclaw search <query>` — browse the catalogue. */
 export async function search(
   query: string,
   config: ResolvedConfig,
@@ -49,7 +49,7 @@ export async function search(
       note(`showing ${page.items.length} of ${page.total}; narrow the query to see others`)
     }
     say()
-    note(`Call one: ${style.bold(`ducat "use ${page.items[0]!.name} to ..."`)}`)
+    note(`Call one: ${style.bold(`jarvisclaw "use ${page.items[0]!.name} to ..."`)}`)
     return 0
   } catch (err) {
     spin.stop()
@@ -58,7 +58,7 @@ export async function search(
 }
 
 /**
- * `ducat models` — what the gateway serves, and how to pick one.
+ * `jarvisclaw models` — what the gateway serves, and how to pick one.
  *
  * Routes are listed first and models second, cheapest-known first within each
  * group. The gateway serves 300+ models; an unsorted dump of them is a list nobody
@@ -128,7 +128,7 @@ export async function models(config: ResolvedConfig, opts: { all?: boolean } = {
       say(`  ${m.id}${price}`)
     }
     if (shown.length < sorted.length) {
-      note(`  … ${sorted.length - shown.length} more — ducat models --all`)
+      note(`  … ${sorted.length - shown.length} more — jarvisclaw models --all`)
     }
 
     if (perCall.length > 0) {
@@ -144,8 +144,8 @@ export async function models(config: ResolvedConfig, opts: { all?: boolean } = {
     }
 
     say()
-    note(`Pick one for a single task:  ducat -m <model> "<task>"`)
-    note(`Make it the default:         ducat config set model <model>`)
+    note(`Pick one for a single task:  jarvisclaw -m <model> "<task>"`)
+    note(`Make it the default:         jarvisclaw config set model <model>`)
     if (free.length > 0) {
       note(`Paid models need a credential — free ones and browsing do not.`)
     }
@@ -157,7 +157,7 @@ export async function models(config: ResolvedConfig, opts: { all?: boolean } = {
 }
 
 /**
- * How many paid models `ducat models` shows before asking for `--all`. The gateway
+ * How many paid models `jarvisclaw models` shows before asking for `--all`. The gateway
  * serves 300+; a screenful of the cheapest is what someone choosing actually reads.
  */
 const PAID_MODEL_PREVIEW = 20
@@ -175,7 +175,7 @@ function rate(usd: number): string {
 }
 
 
-/** `ducat agents` — other agents on the platform. */
+/** `jarvisclaw agents` — other agents on the platform. */
 export async function agents(config: ResolvedConfig, opts: { search?: string } = {}): Promise<number> {
   const client = await buildAnonymousClient(config)
   const spin = spinner('reading the agent registry')
@@ -204,7 +204,7 @@ export async function agents(config: ResolvedConfig, opts: { search?: string } =
   }
 }
 
-/** `ducat balance` — what is spendable. */
+/** `jarvisclaw balance` — what is spendable. */
 export async function balance(config: ResolvedConfig): Promise<number> {
   const spin = spinner('reading the balance')
   try {
@@ -231,7 +231,7 @@ export async function balance(config: ResolvedConfig): Promise<number> {
 }
 
 /**
- * `ducat config` — what is in effect, and where it came from.
+ * `jarvisclaw config` — what is in effect, and where it came from.
  *
  * Reports the source of each setting because "it's using the wrong key" is almost
  * always a forgotten environment variable, and guessing at that is miserable.
@@ -248,7 +248,7 @@ export async function showConfig(config: ResolvedConfig): Promise<number> {
 
   heading('Credential')
   if (config.source.credential === 'none') {
-    say(`  ${style.dim('none — run `ducat setup`')}`)
+    say(`  ${style.dim('none — run `jarvisclaw setup`')}`)
   } else {
     const kind = config.walletKey ? 'wallet key' : 'api key'
     const secret = config.walletKey ?? config.apiKey ?? ''
@@ -262,7 +262,7 @@ export async function showConfig(config: ResolvedConfig): Promise<number> {
   say(`  ${config.source.configPath}`)
   if (Object.keys(stored).length === 0) note('  (not created yet)')
   say()
-  note('Change the default model:  ducat config set model <model|auto|auto/free>')
+  note('Change the default model:  jarvisclaw config set model <model|auto|auto/free>')
   return 0
 }
 
@@ -275,7 +275,7 @@ const SETTABLE = {
 } as const
 
 /**
- * `ducat config set <key> <value>` — persist a default.
+ * `jarvisclaw config set <key> <value>` — persist a default.
  *
  * Credentials are deliberately not settable this way. `setup` writes those, and it
  * is the place that explains what a hot wallet means; a bare `config set api-key`
@@ -292,7 +292,7 @@ export async function setConfig(args: string[]): Promise<number> {
   const value = rest.join(' ')
 
   if (!rawKey || value === '') {
-    say(`${style.red('✗')} usage: ducat config set <key> <value>`)
+    say(`${style.red('✗')} usage: jarvisclaw config set <key> <value>`)
     note(`  keys: ${Object.keys(SETTABLE).join(', ')}`)
     return 2
   }
@@ -302,7 +302,7 @@ export async function setConfig(args: string[]): Promise<number> {
     say(`${style.red('✗')} unknown setting ${style.bold(key)}`)
     note(`  keys: ${Object.keys(SETTABLE).join(', ')}`)
     if (key.includes('key') || key.includes('wallet')) {
-      note('  Credentials are set by `ducat setup`, which explains the tradeoffs first.')
+      note('  Credentials are set by `jarvisclaw setup`, which explains the tradeoffs first.')
     }
     return 2
   }
@@ -328,8 +328,8 @@ export async function setConfig(args: string[]): Promise<number> {
   note(`  ${configPath()}`)
   // A flag or an environment variable outranks the file, so saying "set" without
   // this would be a lie in exactly the case that confuses people most.
-  if (key === 'model' && process.env['DUCAT_MODEL']) {
-    warn('DUCAT_MODEL is set in this shell and overrides the file.')
+  if (key === 'model' && process.env['JARVISCLAW_MODEL']) {
+    warn('JARVISCLAW_MODEL is set in this shell and overrides the file.')
   }
   return 0
 }

@@ -1,9 +1,9 @@
-# ducat
+# jarvisclaw
 
 A terminal AI agent with its own wallet. It calls things instead of describing them.
 
 ```bash
-npx ducat "what's the weather in Tokyo right now?"
+npx jarvisclaw "what's the weather in Tokyo right now?"
 ```
 
 One sentence. It works out that it needs an API, searches a catalogue of a few
@@ -21,8 +21,8 @@ You never look up an endpoint, a schema or a price yourself.
 ## Install
 
 ```bash
-npx ducat            # no install
-npm install -g ducat
+npx jarvisclaw            # no install
+npm install -g jarvisclaw
 ```
 
 Node 20 or newer.
@@ -32,42 +32,42 @@ Node 20 or newer.
 Free models and browsing need no account, no key, no wallet:
 
 ```bash
-ducat "explain what x402 is"      # runs on a free model
-ducat search weather
-ducat models                       # marks which models are free
-ducat agents
+jarvisclaw "explain what x402 is"      # runs on a free model
+jarvisclaw search weather
+jarvisclaw models                       # marks which models are free
+jarvisclaw agents
 ```
 
 ## Then pick how paid calls get paid
 
 ```bash
-ducat setup
+jarvisclaw setup
 ```
 
 Two ways, and it asks which:
 
-**A wallet on this machine.** ducat generates one. You send USDC to it from your
+**A wallet on this machine.** jarvisclaw generates one. You send USDC to it from your
 own wallet, and that transfer is the only approval that matters — signed in your
 wallet, for an amount you chose. No account, no signup, keys stay here.
 
 **A jarvisclaw.ai account.** Your account balance pays. Top up on the website,
 where the history and receipts live.
 
-Note what ducat never does: ask for a private key you already have. That prompt is
+Note what jarvisclaw never does: ask for a private key you already have. That prompt is
 what phishing imitates, and such a key would grant far more than a per-call budget
 needs.
 
 ## Funding the wallet
 
 ```bash
-ducat wallet     # shows your address
-ducat balance    # on-chain USDC, once it lands
+jarvisclaw wallet     # shows your address
+jarvisclaw balance    # on-chain USDC, once it lands
 ```
 
 Send **USDC on Base**. You do not need ETH — the gateway pays the gas. Start with a
 couple of dollars; most calls cost a fraction of a cent.
 
-It is a hot wallet in `~/.ducat/wallet.json`, mode `0600`. Anything in it can be
+It is a hot wallet in `~/.jarvisclaw/wallet.json`, mode `0600`. Anything in it can be
 spent by this machine, and if the file is lost the funds are gone — no recovery, no
 support desk. Keep only what you are willing to spend.
 
@@ -87,8 +87,8 @@ Two ceilings decide when a question is warranted:
 | `--max-spend <usd>` | 1 | the session stops here — refused, not prompted |
 
 ```bash
-ducat --max-spend 0.20 "compare three image apis on price"
-ducat --confirm-all "spend carefully"        # ask about everything
+jarvisclaw --max-spend 0.20 "compare three image apis on price"
+jarvisclaw --confirm-all "spend carefully"        # ask about everything
 ```
 
 A price that cannot be read is always confirmed. The session limit denies rather
@@ -121,23 +121,23 @@ offering them would produce a payment error for something you never asked to buy
 
 ## Where settings live
 
-Precedence: flag, then environment, then `~/.ducat/config.json`, then the generated
+Precedence: flag, then environment, then `~/.jarvisclaw/config.json`, then the generated
 wallet. An explicit flag always wins, so a forgotten `export` cannot quietly
-override what you typed. `ducat config` prints what is in effect and where each
+override what you typed. `jarvisclaw config` prints what is in effect and where each
 value came from.
 
 | variable | meaning |
 | --- | --- |
-| `DUCAT_API_KEY` | api key |
-| `DUCAT_WALLET_KEY` | wallet private key, for one run |
-| `DUCAT_BASE_URL` | a different gateway |
-| `DUCAT_MODEL` | default model |
+| `JARVISCLAW_API_KEY` | api key |
+| `JARVISCLAW_WALLET_KEY` | wallet private key, for one run |
+| `JARVISCLAW_BASE_URL` | a different gateway |
+| `JARVISCLAW_MODEL` | default model |
 | `NO_COLOR` | disable colour |
 
 ## As a library
 
 ```ts
-import { PlatformClient, run, SpendPolicy } from 'ducat'
+import { PlatformClient, run, SpendPolicy } from 'jarvisclaw'
 
 const client = await PlatformClient.create({ apiKey: 'sk-...' })
 const policy = new SpendPolicy({ sessionLimitUsd: 0.5 })

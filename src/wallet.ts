@@ -16,16 +16,24 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
-/** Where the key lives. Sibling of config.json, same 0600 treatment. */
+/**
+ * Where the key lives. Sibling of config.json, same 0600 treatment.
+ *
+ * `~/.jarvisclaw/` is shared with the Python SDK, which writes cost_log.jsonl and a
+ * cache/ directory there. Sharing one directory per brand is the usual convention
+ * (gh, aws), but it means this file has a neighbour that did not create it: never
+ * clear the directory, only this file, and keep the 0600 mode on every write rather
+ * than relying on the directory's permissions.
+ */
 export function walletPath(): string {
-  return join(homedir(), '.ducat', 'wallet.json')
+  return join(homedir(), '.jarvisclaw', 'wallet.json')
 }
 
 export interface StoredWallet {
   /** 0x-prefixed 32-byte key. */
   privateKey: string
   address: string
-  /** Unix seconds, for `ducat wallet` to say how old it is. */
+  /** Unix seconds, for `jarvisclaw wallet` to say how old it is. */
   createdAt: number
 }
 

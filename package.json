@@ -1,5 +1,5 @@
 {
-  "name": "ducat",
+  "name": "jarvisclaw",
   "version": "0.1.0",
   "description": "A terminal AI agent with its own wallet — 4000+ APIs and 80+ models, paid per call over x402.",
   "license": "MIT",
@@ -11,7 +11,7 @@
   },
   "bugs": "https://github.com/api-jarvisclaw/ducat/issues",
   "keywords": [
-    "ducat",
+    "jarvisclaw",
     "ai",
     "agent",
     "cli",
@@ -27,7 +27,7 @@
     "node": ">=20"
   },
   "bin": {
-    "ducat": "./dist/cli.js"
+    "jarvisclaw": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

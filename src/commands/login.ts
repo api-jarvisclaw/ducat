@@ -1,9 +1,9 @@
 /**
- * `ducat logout` — remove a stored credential.
+ * `jarvisclaw logout` — remove a stored credential.
  *
  * There is no `login` here any more. It used to offer "paste your private key",
  * which is the prompt phishing imitates and which grants far more than a per-call
- * budget needs. `ducat setup` replaced it: it generates a wallet rather than asking
+ * budget needs. `jarvisclaw setup` replaced it: it generates a wallet rather than asking
  * for one. `login` remains registered as an alias for setup, since it is the word
  * people type.
  */
@@ -43,7 +43,7 @@ export async function logout(): Promise<number> {
     say()
     warn(`A local wallet remains at ${walletPath()}.`)
     note('  It may hold USDC. Deleting the file destroys the only key to it.')
-    note('  Check it first with: ducat wallet   /   ducat balance')
+    note('  Check it first with: jarvisclaw wallet   /   jarvisclaw balance')
     if (await confirmYesNo('  Delete it anyway? This cannot be undone.')) {
       // Asked twice on purpose. The first answer can be a reflex; this one is
       // irreversible and unrecoverable.
