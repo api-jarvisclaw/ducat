@@ -1,6 +1,6 @@
 /** Command dispatch. Importable without side effects; `cli.ts` is the executable. */
 import { HELP, parseArgs } from './args.js'
-import { agents, balance, models, search, showConfig } from './commands/browse.js'
+import { agents, balance, models, search, setConfig, showConfig } from './commands/browse.js'
 import { logout } from './commands/login.js'
 import { setup } from './commands/setup.js'
 import { wallet } from './commands/wallet.js'
@@ -52,13 +52,15 @@ export async function main(argv: string[]): Promise<number> {
         ...(args.flags.category ? { category: args.flags.category } : {}),
       })
     case 'models':
-      return models(config)
+      return models(config, args.flags.all ? { all: true } : {})
     case 'agents':
       return agents(config, args.rest.length > 0 ? { search: args.rest.join(' ') } : {})
     case 'balance':
       return balance(config)
     case 'config':
-      return showConfig(config)
+      // `config` reports, `config set` writes. Subcommand rather than a flag so the
+      // reporting form stays the bare word, which is what people reach for first.
+      return args.rest[0] === 'set' ? setConfig(args.rest.slice(1)) : showConfig(config)
     case 'chat':
       return runInteractive(config)
     case 'run': {

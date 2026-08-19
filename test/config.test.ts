@@ -6,6 +6,7 @@ import { parseArgs } from '../src/args.js'
 import {
   DEFAULT_GATEWAY,
   DEFAULT_MODEL,
+  FREE_MODEL,
   maskSecret,
   resolveConfig,
   usdToBaseUnits,
@@ -53,9 +54,18 @@ describe('resolveConfig precedence', () => {
     expect(config.source.credential).toBe('none')
   })
 
-  it('defaults to a free model so a first run cannot cost anything', () => {
-    // A paid default would charge someone who typed one command to try the tool.
-    expect(DEFAULT_MODEL).toContain('free')
+  it('has a free default for callers with no credential', () => {
+    // The property is that a first run cannot cost anything. It used to be asserted
+    // by requiring DEFAULT_MODEL to contain "free", which conflated two decisions:
+    // what an anonymous caller gets, and what a paying one gets. The default is now
+    // smart routing (`auto`), because confining a credentialed user to free models
+    // gives them worse answers than they are paying for with no way to see why.
+    //
+    // The guarantee lives in buildRunClient, which forces FREE_MODEL when there is
+    // no credential — see test/anonymous-run.test.ts. Here it is enough that the
+    // free route exists and is distinct from the paid default.
+    expect(FREE_MODEL).toContain('free')
+    expect(DEFAULT_MODEL).not.toBe(FREE_MODEL)
   })
 
   it('reads a credential from the environment', () => {

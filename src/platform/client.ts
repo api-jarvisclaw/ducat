@@ -14,8 +14,16 @@ export interface ModelInfo {
   ownedBy: string
   /** Zero-cost per the gateway's own pricing, not a guess from a local list. */
   free: boolean
+  /**
+   * How the model bills. Per-call models (video, image, music) report both token
+   * rates as 0, so the two cannot be told apart by looking at the numbers.
+   */
+  pricing?: 'per-token' | 'per-call'
+  /** Only on per-token models; absent rather than 0 when billing is per call. */
   inputPerMTokenUsd?: number
   outputPerMTokenUsd?: number
+  /** Only on per-call models: the cost of one call. */
+  fixedPriceUsd?: number
 }
 
 /** One catalogue API, as the marketplace lists it. */
@@ -373,22 +381,35 @@ interface RawDiscoveryModel {
   model?: string
   input_per_m_token_usd?: number
   output_per_m_token_usd?: number
+  /** `per-token` or `per-call`. Absent on older gateways; treated as per-token. */
+  pricing_type?: string
+  /** Set on per-call models. The token rates are 0 for these, which is not a price. */
+  fixed_price_usd?: number
   free?: boolean
 }
 
 function toModelInfo(raw: RawDiscoveryModel): ModelInfo {
+  // Video, image and music models are priced per call, and report both token rates
+  // as 0. Reading those as a price displayed "$0/M in · $0/M out" for a model that
+  // costs $1.575 a call — understating a real charge as free, which is the worst
+  // direction for this to be wrong in. The token rates are only meaningful when the
+  // gateway says the model is priced per token.
+  const perCall = raw.pricing_type === 'per-call'
+
   return {
     id: raw.model ?? '',
     // The discovery endpoint reports pricing rather than an owner; the id already
     // carries the vendor prefix (`openai/gpt-5`), so nothing is lost.
     ownedBy: (raw.model ?? '').includes('/') ? (raw.model ?? '').split('/')[0]! : '',
     free: raw.free === true,
-    ...(raw.input_per_m_token_usd === undefined
+    ...(perCall || raw.input_per_m_token_usd === undefined
       ? {}
       : { inputPerMTokenUsd: raw.input_per_m_token_usd }),
-    ...(raw.output_per_m_token_usd === undefined
+    ...(perCall || raw.output_per_m_token_usd === undefined
       ? {}
       : { outputPerMTokenUsd: raw.output_per_m_token_usd }),
+    ...(raw.fixed_price_usd === undefined ? {} : { fixedPriceUsd: raw.fixed_price_usd }),
+    ...(perCall ? { pricing: 'per-call' as const } : { pricing: 'per-token' as const }),
   }
 }
 

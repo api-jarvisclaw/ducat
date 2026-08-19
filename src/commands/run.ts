@@ -9,6 +9,7 @@ import type { ConfirmFn } from '../agent/tools.js'
 import { buildRunClient } from '../platform/factory.js'
 import type { ResolvedConfig } from '../config.js'
 import { SpendPolicy } from '../spend.js'
+import { DEFAULT_MODEL } from '../config.js'
 import { confirmYesNo, formatPrice, formatUsd, note, say, spinner, style, warn } from '../ui.js'
 
 /** Build the session's spend policy from resolved config. */
@@ -57,8 +58,8 @@ function makeConfirm(policy: SpendPolicy): { confirm: ConfirmFn; spentUsd: () =>
 
 /** Run one task and exit. */
 export async function runOnce(prompt: string, config: ResolvedConfig): Promise<number> {
-  const { client, model, anonymous } = await buildRunClient(config)
-  if (anonymous) announceAnonymous(config.model, model)
+  const { client, model, anonymous, downgraded } = await buildRunClient(config)
+  if (anonymous) announceAnonymous(config.model, model, downgraded)
   const policy = policyFor(config)
   const { confirm, spentUsd } = makeConfirm(policy)
 
@@ -88,7 +89,7 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
       warn("The model ran out of output budget, so the answer above may be cut short.")
     }
     if (result.hitRoundLimit) {
-      warn(`Stopped after  rounds. The answer above may be incomplete.`)
+      warn(`Stopped after ${result.rounds} rounds. The answer above may be incomplete.`)
     }
     return 0
   } catch (err) {
@@ -99,13 +100,13 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
 
 /** Interactive session. Context carries across turns; spending does not reset. */
 export async function runInteractive(config: ResolvedConfig): Promise<number> {
-  const { client, model, anonymous } = await buildRunClient(config)
+  const { client, model, anonymous, downgraded } = await buildRunClient(config)
   const policy = policyFor(config)
   const { confirm, spentUsd } = makeConfirm(policy)
 
   say(`${style.bold('ducat')} ${style.dim(`· ${model} · ${config.baseUrl}`)}`)
   if (anonymous) {
-    announceAnonymous(config.model, model)
+    announceAnonymous(config.model, model, downgraded)
   } else {
     note(client.address ? `wallet ${client.address}` : 'api key mode')
   }
@@ -168,9 +169,17 @@ export async function runInteractive(config: ResolvedConfig): Promise<number> {
  * Stated rather than left implicit: the user should know why paid APIs will be
  * refused, and that the model was switched if they had asked for another one.
  */
-function announceAnonymous(requestedModel: string, actualModel: string): void {
+/**
+ * Say what is running and, if it is not what was asked for, why.
+ *
+ * `downgraded` comes from the factory rather than being recomputed from the two
+ * names, because the default model is now `auto` — so a name mismatch no longer
+ * means the user asked for anything. Warning "auto needs payment" at someone who
+ * never typed `auto` would be blaming them for a default.
+ */
+function announceAnonymous(requestedModel: string, actualModel: string, downgraded: boolean): void {
   note(`no credential — running free on ${actualModel}`)
-  if (requestedModel !== actualModel) {
+  if (downgraded && requestedModel !== DEFAULT_MODEL) {
     warn(`${requestedModel} needs payment, so ${actualModel} is used instead.`)
     note('Run `ducat setup` to use paid models and APIs.')
   }
