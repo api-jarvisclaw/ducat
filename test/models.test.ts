@@ -3,7 +3,7 @@
  *
  * Its own file because it covers a bug a mocked test could not have found: the
  * command was written against `/v1/models`, which answers 401 without a
- * credential, so `jarvisclaw models` — documented as needing no login — failed for
+ * credential, so `ducat models` — documented as needing no login — failed for
  * exactly the audience it was for. Only running it against the real gateway showed
  * that. These tests pin the fix.
  */

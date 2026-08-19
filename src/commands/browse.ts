@@ -4,12 +4,12 @@
  * These exist so someone can see what the platform holds before committing a
  * credential or spending anything. `search` and `models` need no login at all.
  */
-import { JarvisClawError } from '@jarvisclaw/sdk'
+import { JarvisClawError } from '@jarvisclaw-ai/sdk'
 import { maskSecret, readConfig, type ResolvedConfig } from '../config.js'
 import { buildAnonymousClient, buildClient } from '../platform/factory.js'
 import { formatPrice, formatUsd, heading, note, say, spinner, style } from '../ui.js'
 
-/** `jarvisclaw search <query>` — browse the catalogue. */
+/** `ducat search <query>` — browse the catalogue. */
 export async function search(
   query: string,
   config: ResolvedConfig,
@@ -48,7 +48,7 @@ export async function search(
       note(`showing ${page.items.length} of ${page.total}; narrow the query to see others`)
     }
     say()
-    note(`Call one: ${style.bold(`jarvisclaw "use ${page.items[0]!.name} to ..."`)}`)
+    note(`Call one: ${style.bold(`ducat "use ${page.items[0]!.name} to ..."`)}`)
     return 0
   } catch (err) {
     spin.stop()
@@ -56,7 +56,7 @@ export async function search(
   }
 }
 
-/** `jarvisclaw models` — what the gateway serves. */
+/** `ducat models` — what the gateway serves. */
 export async function models(config: ResolvedConfig): Promise<number> {
   const client = await buildAnonymousClient(config)
   const spin = spinner('reading the model list')
@@ -97,7 +97,7 @@ export async function models(config: ResolvedConfig): Promise<number> {
   }
 }
 
-/** `jarvisclaw agents` — other agents on the platform. */
+/** `ducat agents` — other agents on the platform. */
 export async function agents(config: ResolvedConfig, opts: { search?: string } = {}): Promise<number> {
   const client = await buildAnonymousClient(config)
   const spin = spinner('reading the agent registry')
@@ -153,7 +153,7 @@ export async function balance(config: ResolvedConfig): Promise<number> {
 }
 
 /**
- * `jarvisclaw config` — what is in effect, and where it came from.
+ * `ducat config` — what is in effect, and where it came from.
  *
  * Reports the source of each setting because "it's using the wrong key" is almost
  * always a forgotten environment variable, and guessing at that is miserable.

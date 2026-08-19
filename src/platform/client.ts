@@ -6,7 +6,7 @@
  * time, because a hardcoded list goes stale silently and an agent acting on a
  * stale list fails in a way the user cannot diagnose.
  */
-import { BaseClient } from '@jarvisclaw/sdk'
+import { BaseClient } from '@jarvisclaw-ai/sdk'
 
 /** One model the gateway currently serves. */
 export interface ModelInfo {

@@ -154,7 +154,7 @@ const result = await run('find a weather api for Tokyo', {
 own rather than inheriting the CLI's prompts.
 
 Payments and transport come from
-[`@jarvisclaw/sdk`](https://github.com/api-jarvisclaw/ts-sdk), usable on its own.
+[`@jarvisclaw-ai/sdk`](https://github.com/api-jarvisclaw/ts-sdk), usable on its own.
 
 ## Development
 

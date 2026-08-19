@@ -1,4 +1,4 @@
-import { InsufficientBalanceError } from '@jarvisclaw/sdk'
+import { InsufficientBalanceError } from '@jarvisclaw-ai/sdk'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_MAX_ROUNDS, run } from '../src/agent/runner.js'
 import { PlatformClient } from '../src/platform/client.js'
