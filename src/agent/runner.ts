@@ -12,6 +12,18 @@ import { toolSchemas, tools, type ConfirmFn } from './tools.js'
 /** How many model→tool→model rounds one request may take. */
 export const DEFAULT_MAX_ROUNDS = 8
 
+/**
+ * Output budget per turn.
+ *
+ * Set because leaving it unset broke the free tier in practice: several free models
+ * are reasoning models that think in the content field before emitting a tool call,
+ * and against the provider's small default they spent the entire budget reasoning
+ * and returned `finish_reason: length` with no tool call at all — the agent
+ * described the API it should call instead of calling it. Generous enough for a
+ * reasoning preamble plus the call.
+ */
+export const DEFAULT_MAX_TOKENS = 4096
+
 export interface RunnerOptions {
   client: PlatformClient
   model: string
@@ -25,6 +37,8 @@ export interface RunnerOptions {
    * why the others are missing so it can say so rather than guess.
    */
   anonymous?: boolean
+  /** Output budget per turn. Defaults to DEFAULT_MAX_TOKENS. */
+  maxTokens?: number
 }
 
 export interface RunResult {
@@ -35,6 +49,8 @@ export interface RunResult {
   rounds: number
   /** True when the round cap stopped the loop before the model was finished. */
   hitRoundLimit: boolean
+  /** True when the model hit its output budget instead of finishing. */
+  truncated: boolean
 }
 
 /**
@@ -97,10 +113,32 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
       model: opts.model,
       messages,
       tools: schemas,
+      maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     })
 
+    // A reasoning model that runs out of budget mid-thought returns prose and no
+    // tool call, so the task silently becomes a description of what should have
+    // happened. Saying so beats presenting that as the answer.
+    if (turn.finishReason === 'length' && turn.toolCalls.length === 0) {
+      return {
+        answer:
+          turn.content.trim() ||
+          'The model stopped before answering — it used its whole output budget.',
+        toolsUsed,
+        rounds: round,
+        hitRoundLimit: false,
+        truncated: true,
+      }
+    }
+
     if (turn.toolCalls.length === 0) {
-      return { answer: turn.content, toolsUsed, rounds: round, hitRoundLimit: false }
+      return {
+        answer: turn.content,
+        toolsUsed,
+        rounds: round,
+        hitRoundLimit: false,
+        truncated: false,
+      }
     }
 
     // The assistant turn must be recorded with its tool_calls before the results,
@@ -126,6 +164,7 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
   // the user gets an answer built from the work already done instead of nothing.
   const final = await opts.client.chat({
     model: opts.model,
+    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     messages: [
       ...messages,
       {
@@ -136,7 +175,13 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
       },
     ],
   })
-  return { answer: final.content, toolsUsed, rounds: maxRounds, hitRoundLimit: true }
+  return {
+    answer: final.content,
+    toolsUsed,
+    rounds: maxRounds,
+    hitRoundLimit: true,
+    truncated: final.finishReason === 'length',
+  }
 }
 
 /**

@@ -53,8 +53,11 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
       note(`used: ${result.toolsUsed.join(' → ')}`)
     }
     if (spentUsd() > 0) note(`spent: ${formatUsd(spentUsd())}`)
+    if (result.truncated) {
+      warn("The model ran out of output budget, so the answer above may be cut short.")
+    }
     if (result.hitRoundLimit) {
-      warn(`Stopped after ${result.rounds} rounds. The answer above may be incomplete.`)
+      warn(`Stopped after  rounds. The answer above may be incomplete.`)
     }
     return 0
   } catch (err) {

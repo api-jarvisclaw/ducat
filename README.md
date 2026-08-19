@@ -3,11 +3,23 @@
 A terminal agent that calls things instead of describing them.
 
 ```bash
-npx jarvisclaw "find a weather api and check the forecast for Tokyo"
+npx jarvisclaw "what's the weather in Tokyo right now?"
 ```
 
-It searches the live catalogue, reads the API's real spec, shows you the price,
-and — once you say yes — calls it and reports what came back.
+One sentence. It works out that it needs an API, searches the catalogue, reads the
+real spec, and asks before spending anything:
+
+```
+no credential — running free on auto/free
+
+I can get Tokyo's current weather using the Weather Current City API
+for $0.01150 per call. Would you like me to proceed?
+
+used: search_apis → search_apis → get_api_detail
+```
+
+Say yes and it calls the API and reports what came back. You never look up an
+endpoint, a schema or a price yourself.
 
 **No account, no key, no signup to start.** The gateway serves a free tier to
 requests with no credential, so the command above works on a machine that has never
