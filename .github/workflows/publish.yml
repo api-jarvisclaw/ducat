@@ -78,6 +78,11 @@ jobs:
           echo "npm credential present (${#NODE_AUTH_TOKEN} chars)"
 
       - name: Publish
-        run: npm publish --provenance
+        # --access public is required, not merely conventional: npm treats a package
+        # that does not exist yet as private by default, and --provenance refuses to
+        # sign one ("Can't generate provenance for new or private package"). This is
+        # an unscoped package, so it was easy to assume the default was already
+        # public — it is not, for a first publish.
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPMSECRET }}
