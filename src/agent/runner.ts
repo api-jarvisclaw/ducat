@@ -62,7 +62,7 @@ export interface RunResult {
  */
 function systemPrompt(suffix?: string): string {
   return [
-    'You are ducat, a terminal agent for the JarvisClaw gateway. You do not just',
+    'You are jarvisclaw, a terminal agent for the JarvisClaw gateway. You do not just',
     'describe how to use the platform — you call it. When a request can be answered by',
     'invoking something, invoke it and report the result.',
     '',
@@ -93,7 +93,7 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
     opts.anonymous
       ? 'This session has no credential, so only the free tools are available. ' +
         'Paid APIs, intent resolution and balance lookups need one — if the user ' +
-        'asks for those, say `ducat setup` is needed rather than guessing at ' +
+        'asks for those, say `jarvisclaw setup` is needed rather than guessing at ' +
         'an answer.'
       : undefined,
   ]
@@ -223,7 +223,7 @@ async function runOneTool(
         return (
           `${call.name} is unavailable without a credential: the gateway wants ` +
           `payment for it (${err.message}). Do not retry it. Use a different tool, ` +
-          `and tell the user this one needs \`ducat setup\`.`
+          `and tell the user this one needs \`jarvisclaw setup\`.`
         )
       }
       // On a genuinely paid tool the user did approve a charge, so being out of

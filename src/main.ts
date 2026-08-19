@@ -16,7 +16,7 @@ export async function main(argv: string[]): Promise<number> {
 
   if (args.error) {
     say(`${style.red('✗')} ${args.error}`)
-    note('Run `ducat --help` for usage.')
+    note('Run `jarvisclaw --help` for usage.')
     return 2
   }
   if (args.flags.version) {
@@ -67,7 +67,7 @@ export async function main(argv: string[]): Promise<number> {
       const prompt = args.rest.join(' ').trim()
       if (!prompt) {
         say(`${style.red('✗')} No task given.`)
-        note('Try: ducat "find a weather api and check Tokyo"')
+        note('Try: jarvisclaw "find a weather api and check Tokyo"')
         return 2
       }
       return runOnce(prompt, config)

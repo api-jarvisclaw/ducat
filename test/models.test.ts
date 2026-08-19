@@ -3,7 +3,7 @@
  *
  * Its own file because it covers a bug a mocked test could not have found: the
  * command was written against `/v1/models`, which answers 401 without a
- * credential, so `ducat models` — documented as needing no login — failed for
+ * credential, so `jarvisclaw models` — documented as needing no login — failed for
  * exactly the audience it was for. Only running it against the real gateway showed
  * that. These tests pin the fix.
  */
@@ -134,7 +134,7 @@ describe('freeModels()', () => {
 
 /**
  * Video, image and music models bill per call and report BOTH token rates as 0. The
- * mapping read those as a price, so `ducat models` printed "$0/M in · $0/M out" for
+ * mapping read those as a price, so `jarvisclaw models` printed "$0/M in · $0/M out" for
  * bytedance/seedance-2.5 — which costs $1.575 a call. Understating a real charge as
  * free is the worst direction for this to be wrong in, and it is not visible from
  * the numbers alone: only `pricing_type` distinguishes the two.

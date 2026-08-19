@@ -1,5 +1,5 @@
 /**
- * `ducat "<task>"` and the interactive session — the CLI's main path.
+ * `jarvisclaw "<task>"` and the interactive session — the CLI's main path.
  */
 import { InsufficientBalanceError, JarvisClawError } from '@jarvisclaw-ai/sdk'
 import { createInterface } from 'node:readline/promises'
@@ -104,7 +104,7 @@ export async function runInteractive(config: ResolvedConfig): Promise<number> {
   const policy = policyFor(config)
   const { confirm, spentUsd } = makeConfirm(policy)
 
-  say(`${style.bold('ducat')} ${style.dim(`· ${model} · ${config.baseUrl}`)}`)
+  say(`${style.bold('jarvisclaw')} ${style.dim(`· ${model} · ${config.baseUrl}`)}`)
   if (anonymous) {
     announceAnonymous(config.model, model, downgraded)
   } else {
@@ -181,7 +181,7 @@ function announceAnonymous(requestedModel: string, actualModel: string, downgrad
   note(`no credential — running free on ${actualModel}`)
   if (downgraded && requestedModel !== DEFAULT_MODEL) {
     warn(`${requestedModel} needs payment, so ${actualModel} is used instead.`)
-    note('Run `ducat setup` to use paid models and APIs.')
+    note('Run `jarvisclaw setup` to use paid models and APIs.')
   }
 }
 
@@ -201,7 +201,7 @@ function reportError(err: unknown, ctx: { anonymous: boolean } = { anonymous: fa
     // broken — and with no credential there is no wallet to top up either.
     note(
       ctx.anonymous
-        ? 'That needs a credential. Run `ducat setup` — free models work without one.'
+        ? 'That needs a credential. Run `jarvisclaw setup` — free models work without one.'
         : 'Top up the wallet, or switch to a free model with --model auto/free.',
     )
     return 2

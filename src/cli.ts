@@ -1,5 +1,5 @@
 /**
- * The `ducat` executable.
+ * The `jarvisclaw` executable.
  *
  * Nothing but the invocation: `main` lives in main.ts so tests and library
  * consumers can import it without starting a session or calling process.exit.

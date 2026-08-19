@@ -1,5 +1,5 @@
 /**
- * `ducat` as a library.
+ * `jarvisclaw` as a library.
  *
  * The CLI is the product; this surface exists so the agent loop and the platform
  * client can be embedded, and so tests can drive `main` without spawning a process.

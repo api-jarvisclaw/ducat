@@ -1,9 +1,9 @@
 /**
- * `ducat setup` — pick how payment works, once.
+ * `jarvisclaw setup` — pick how payment works, once.
  *
  * Two ways, and the choice is the user's:
  *
- *   1. A local wallet ducat generates. Non-custodial, no account. The user funds it
+ *   1. A local wallet jarvisclaw generates. Non-custodial, no account. The user funds it
  *      from their own wallet, and that transfer is both the consent and the cap.
  *   2. A jarvisclaw.ai API key. The account pays; billing, history and top-ups live
  *      on the website where they belong.
@@ -17,12 +17,12 @@ import { assertNoWalletToOverwrite, getOrCreateWallet, loadWallet, walletPath } 
 import { ask, formatUsd, heading, note, ok, say, spinner, style, warn } from '../ui.js'
 
 export async function setup(config: ResolvedConfig): Promise<number> {
-  say(`${style.bold('ducat setup')}`)
+  say(`${style.bold('jarvisclaw setup')}`)
   say()
   say('How should paid calls be paid for?')
   say()
   say(`  ${style.bold('1')} ${style.bold('A wallet on this machine')}`)
-  note('     ducat creates it. You send USDC to it from your own wallet.')
+  note('     jarvisclaw creates it. You send USDC to it from your own wallet.')
   note('     No account, no signup. Your keys stay here.')
   say()
   say(`  ${style.bold('2')} ${style.bold('A jarvisclaw.ai account')}`)
@@ -79,8 +79,8 @@ async function setupWallet(): Promise<number> {
   say('  support desk. Keep only what you are willing to spend here.')
 
   say()
-  note('Check it arrived:  ducat balance')
-  note('Then just ask:     ducat "find a weather api and check Tokyo"')
+  note('Check it arrived:  jarvisclaw balance')
+  note('Then just ask:     jarvisclaw "find a weather api and check Tokyo"')
   return 0
 }
 

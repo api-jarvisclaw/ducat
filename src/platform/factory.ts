@@ -7,12 +7,12 @@ import { PlatformClient } from './client.js'
  * Build a client from a real credential, or explain that there is none.
  *
  * The SDK's own "no credential" error names environment variables; a first-time CLI
- * user needs to be pointed at `ducat setup` instead.
+ * user needs to be pointed at `jarvisclaw setup` instead.
  */
 export async function buildClient(config: ResolvedConfig): Promise<PlatformClient> {
   if (!config.apiKey && !config.walletKey) {
     throw new JarvisClawError(
-      'No credential yet. Run `ducat setup` to add an API key or a wallet key.',
+      'No credential yet. Run `jarvisclaw setup` to add an API key or a wallet key.',
     )
   }
 
@@ -29,7 +29,7 @@ export async function buildClient(config: ResolvedConfig): Promise<PlatformClien
 /**
  * A client for the parts of the gateway that need no credential.
  *
- * The catalogue and the model list are both public, so `ducat search` works
+ * The catalogue and the model list are both public, so `jarvisclaw search` works
  * before login.
  *
  * `allowAnonymous` sends no auth header at all, which is the only thing that works:
@@ -46,7 +46,7 @@ export async function buildAnonymousClient(config: ResolvedConfig): Promise<Plat
  * anonymous on a free model.
  *
  * A first run must not be a dead end. The gateway serves a free tier to requests
- * carrying no credential, so `ducat "hello"` works before login — which is the
+ * carrying no credential, so `jarvisclaw "hello"` works before login — which is the
  * point, since a novice who must obtain an API key before seeing anything work is a
  * novice who leaves.
  *

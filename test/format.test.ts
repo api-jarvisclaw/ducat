@@ -1,7 +1,7 @@
 /**
  * Money formatting.
  *
- * A single formatter treated every zero as "free", so `ducat balance` on an empty
+ * A single formatter treated every zero as "free", so `jarvisclaw balance` on an empty
  * wallet printed "free USDC" — which says nothing about having no money, and reads
  * as though the account were on some free plan. Found by running the command, not
  * by a test.

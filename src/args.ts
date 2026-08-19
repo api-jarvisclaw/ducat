@@ -1,7 +1,7 @@
 /**
  * Argument parsing.
  *
- * Hand-rolled rather than a dependency: the grammar is small, and `npx ducat`
+ * Hand-rolled rather than a dependency: the grammar is small, and `npx jarvisclaw`
  * on a cold cache is the first impression this tool makes.
  */
 
@@ -119,7 +119,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     positional.push(arg)
   }
 
-  // `ducat "do a thing"` has to work, so a first positional that is not a
+  // `jarvisclaw "do a thing"` has to work, so a first positional that is not a
   // known command is treated as the task rather than rejected.
   const first = positional[0]
   const isCommand = first !== undefined && KNOWN_COMMANDS.has(first)
@@ -129,12 +129,12 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return { command, rest, flags, ...(error ? { error } : {}) }
 }
 
-export const HELP = `ducat — a terminal agent with its own wallet
+export const HELP = `jarvisclaw — a terminal agent with its own wallet
 
 USAGE
-  ducat "<task>"               do something, then exit
-  ducat                        interactive session
-  ducat <command> [args]
+  jarvisclaw "<task>"               do something, then exit
+  jarvisclaw                        interactive session
+  jarvisclaw <command> [args]
 
 COMMANDS
   setup                        create a wallet, or use a jarvisclaw.ai key
@@ -153,8 +153,8 @@ MODELS
     auto/free                  free models only — the default before setup
     auto/eco                   cheapest paid models
     auto/premium               strongest models, highest cost
-  Or name one yourself: ducat -m anthropic/claude-sonnet-4.6 "<task>"
-  See what is available with \`ducat models\`.
+  Or name one yourself: jarvisclaw -m anthropic/claude-sonnet-4.6 "<task>"
+  See what is available with \`jarvisclaw models\`.
 
 OPTIONS
   -m, --model <id>             model or smart route (default: auto, or auto/free
@@ -171,20 +171,20 @@ OPTIONS
   -v, --version                version
 
 ENVIRONMENT
-  DUCAT_API_KEY                api key
-  DUCAT_WALLET_KEY             wallet private key
-  DUCAT_BASE_URL               gateway url
-  DUCAT_MODEL                  default model
+  JARVISCLAW_API_KEY                api key
+  JARVISCLAW_WALLET_KEY             wallet private key
+  JARVISCLAW_BASE_URL               gateway url
+  JARVISCLAW_MODEL                  default model
   NO_COLOR                     disable colour
 
 EXAMPLES
-  ducat "what's the weather in Tokyo right now?"
-  ducat "find a cheap web search api and look up x402"
-  ducat search blockchain
-  ducat --max-spend 0.20 "compare three image apis on price"
-  ducat -m auto/premium "review this architecture and name the weak points"
-  ducat config set model auto/eco
+  jarvisclaw "what's the weather in Tokyo right now?"
+  jarvisclaw "find a cheap web search api and look up x402"
+  jarvisclaw search blockchain
+  jarvisclaw --max-spend 0.20 "compare three image apis on price"
+  jarvisclaw -m auto/premium "review this architecture and name the weak points"
+  jarvisclaw config set model auto/eco
 
 Free models and browsing need no setup at all. Paid calls come out of a wallet
-ducat creates for you — it holds only what you send it.
+jarvisclaw creates for you — it holds only what you send it.
 `

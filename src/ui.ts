@@ -2,7 +2,7 @@
  * Terminal output and prompts.
  *
  * Deliberately dependency-free: colours are raw ANSI and prompts use readline. The
- * CLI's whole pitch is `npx ducat` on a fresh machine, so every dependency is
+ * CLI's whole pitch is `npx jarvisclaw` on a fresh machine, so every dependency is
  * install time a beginner waits through before seeing anything.
  */
 import { createInterface } from 'node:readline/promises'
