@@ -64,7 +64,20 @@ jobs:
           esac
           echo "sdk dependency is $DEP"
 
+      - name: Check the npm credential is present
+        # An absent secret is an empty string, not an error, so npm publish would
+        # fail as a confusing 401/ENEEDAUTH rather than saying what is missing.
+        # Only the length is printed — never the value.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPMSECRET }}
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::the NPMSECRET repository secret is empty or unset — set it with: gh secret set NPMSECRET --repo api-jarvisclaw/jarvisclaw-cli"
+            exit 1
+          fi
+          echo "npm credential present (${#NODE_AUTH_TOKEN} chars)"
+
       - name: Publish
         run: npm publish --provenance
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPMSECRET }}
