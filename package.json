@@ -1,0 +1,65 @@
+{
+  "name": "jarvisclaw",
+  "version": "0.1.0",
+  "description": "A terminal AI agent that can actually call things — 4000+ APIs and 80+ models on JarvisClaw, paid per call over x402.",
+  "license": "MIT",
+  "author": "JarvisClaw",
+  "homepage": "https://jarvisclaw.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/api-jarvisclaw/jarvisclaw-cli.git"
+  },
+  "bugs": "https://github.com/api-jarvisclaw/jarvisclaw-cli/issues",
+  "keywords": [
+    "jarvisclaw",
+    "ai",
+    "agent",
+    "cli",
+    "x402",
+    "usdc",
+    "llm",
+    "api",
+    "marketplace",
+    "terminal"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "jarvisclaw": "./dist/cli.js",
+    "jc": "./dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "@jarvisclaw/sdk": "github:api-jarvisclaw/ts-sdk#main",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "tsup": "8.5.1",
+    "tsx": "4.19.2",
+    "typescript": "5.9.3",
+    "vitest": "2.1.8"
+  }
+}

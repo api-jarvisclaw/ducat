@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: The built CLI runs
+        # `npx jarvisclaw` on a cold machine is the whole pitch, so a build that
+        # produces an unrunnable bin is worth catching here rather than on someone
+        # else's first install.
+        run: |
+          node dist/cli.js --version
+          node dist/cli.js --help | grep -q 'jarvisclaw'
+
+  file-permissions:
+    # The config file holds a wallet key. Windows reports 666 for every file
+    # regardless of the requested mode, so a developer on Windows cannot observe
+    # this and the assertion is skipped there — it is only ever checked on a POSIX
+    # runner, which makes this job the only place the guarantee is actually tested.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        run: npm install
+
+      - name: Assert the config file is owner-only
+        # Writes through the real writeConfig path, then inspects the mode on disk.
+        run: npx tsx test/check-permissions.ts
