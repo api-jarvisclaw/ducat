@@ -1,7 +1,7 @@
 /**
- * `jarvisclaw "<task>"` and the interactive session — the CLI's main path.
+ * `ducat "<task>"` and the interactive session — the CLI's main path.
  */
-import { InsufficientBalanceError, JarvisClawError } from '@jarvisclaw/sdk'
+import { InsufficientBalanceError, JarvisClawError } from '@jarvisclaw-ai/sdk'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 import { run } from '../agent/runner.js'
@@ -103,7 +103,7 @@ export async function runInteractive(config: ResolvedConfig): Promise<number> {
   const policy = policyFor(config)
   const { confirm, spentUsd } = makeConfirm(policy)
 
-  say(`${style.bold('jarvisclaw')} ${style.dim(`· ${model} · ${config.baseUrl}`)}`)
+  say(`${style.bold('ducat')} ${style.dim(`· ${model} · ${config.baseUrl}`)}`)
   if (anonymous) {
     announceAnonymous(config.model, model)
   } else {

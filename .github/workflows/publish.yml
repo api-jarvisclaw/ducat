@@ -50,15 +50,15 @@ jobs:
           echo "publishing $PKG"
 
       - name: Refuse to publish with a git dependency
-        # The CLI depends on @jarvisclaw/sdk, which is installed from git until it
+        # The CLI depends on @jarvisclaw-ai/sdk, which is installed from git until it
         # is on the registry. A git dependency in a published package fails for
         # anyone whose environment has no git, or no access to the repo — so ts-sdk
         # must be published first and this pinned to a version range.
         run: |
-          DEP=$(node -p "require('./package.json').dependencies['@jarvisclaw/sdk']")
+          DEP=$(node -p "require('./package.json').dependencies['@jarvisclaw-ai/sdk']")
           case "$DEP" in
             github:*|git+*|git:*)
-              echo "::error::@jarvisclaw/sdk is still a git dependency ($DEP). Publish ts-sdk first, then pin a semver range here."
+              echo "::error::@jarvisclaw-ai/sdk is still a git dependency ($DEP). Publish ts-sdk first, then pin a semver range here."
               exit 1
               ;;
           esac

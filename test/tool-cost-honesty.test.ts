@@ -22,7 +22,7 @@
  *   POST /v1/intent/resolve  {"intent":.., paid model}            -> 402 $0.675
  *   GET  /v1/wallet/balance                                       -> 402 $0.045
  */
-import { InsufficientBalanceError } from '@jarvisclaw/sdk'
+import { InsufficientBalanceError } from '@jarvisclaw-ai/sdk'
 import { describe, expect, it, vi } from 'vitest'
 import { run } from '../src/agent/runner.js'
 import { toolSchemas, tools } from '../src/agent/tools.js'

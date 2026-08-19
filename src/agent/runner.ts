@@ -5,7 +5,7 @@
  * cycle the user never sees, so there is a hard cap on rounds and a per-session
  * spend ceiling that stops the loop rather than warning about it.
  */
-import { APIError, InsufficientBalanceError } from '@jarvisclaw/sdk'
+import { APIError, InsufficientBalanceError } from '@jarvisclaw-ai/sdk'
 import type { ChatMessage, PlatformClient } from '../platform/client.js'
 import { toolSchemas, tools, type ConfirmFn } from './tools.js'
 
@@ -62,7 +62,7 @@ export interface RunResult {
  */
 function systemPrompt(suffix?: string): string {
   return [
-    'You are jarvisclaw, a terminal agent for the JarvisClaw gateway. You do not just',
+    'You are ducat, a terminal agent for the JarvisClaw gateway. You do not just',
     'describe how to use the platform — you call it. When a request can be answered by',
     'invoking something, invoke it and report the result.',
     '',

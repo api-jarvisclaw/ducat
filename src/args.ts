@@ -109,7 +109,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     positional.push(arg)
   }
 
-  // `jarvisclaw "do a thing"` has to work, so a first positional that is not a
+  // `ducat "do a thing"` has to work, so a first positional that is not a
   // known command is treated as the task rather than rejected.
   const first = positional[0]
   const isCommand = first !== undefined && KNOWN_COMMANDS.has(first)
