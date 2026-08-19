@@ -1,7 +1,9 @@
 /** Command dispatch. Importable without side effects; `cli.ts` is the executable. */
 import { HELP, parseArgs } from './args.js'
 import { agents, balance, models, search, showConfig } from './commands/browse.js'
-import { login, logout } from './commands/login.js'
+import { logout } from './commands/login.js'
+import { setup } from './commands/setup.js'
+import { wallet } from './commands/wallet.js'
 import { runInteractive, runOnce } from './commands/run.js'
 import { resolveConfig } from './config.js'
 import { note, say, style } from './ui.js'
@@ -32,11 +34,17 @@ export async function main(argv: string[]): Promise<number> {
     ...(args.flags.baseUrl ? { baseUrl: args.flags.baseUrl } : {}),
     ...(args.flags.model ? { model: args.flags.model } : {}),
     ...(args.flags.maxCallUsd === undefined ? {} : { maxCallUsd: args.flags.maxCallUsd }),
+    ...(args.flags.maxSpendUsd === undefined ? {} : { maxSpendUsd: args.flags.maxSpendUsd }),
   })
 
   switch (args.command) {
+    case 'setup':
+      return setup(config)
+    case 'wallet':
+      return wallet()
+    // `login` is the word people type; setup is what it does.
     case 'login':
-      return login(config)
+      return setup(config)
     case 'logout':
       return logout()
     case 'search':

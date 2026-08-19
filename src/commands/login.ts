@@ -1,118 +1,63 @@
-/** `jarvisclaw login` — the first-run path, and the one that has to not lose people. */
-import { JarvisClawError } from '@jarvisclaw/sdk'
-import { detectKeyType } from '@jarvisclaw/sdk'
-import { readConfig, writeConfig, maskSecret, type ResolvedConfig } from '../config.js'
-import { buildClient } from '../platform/factory.js'
-import { ask, confirmYesNo, formatUsd, note, ok, say, spinner, style, warn } from '../ui.js'
-
-export async function login(config: ResolvedConfig): Promise<number> {
-  say(`${style.bold('jarvisclaw login')}`)
-  say()
-  say('Two ways in:')
-  say(`  ${style.bold('1')} API key      ${style.dim('— an account on the gateway pays for calls')}`)
-  say(`  ${style.bold('2')} Wallet key   ${style.dim('— your own USDC pays per call, no account')}`)
-  say()
-
-  const choice = await ask('Which? [1/2] ')
-  const useWallet = choice.trim() === '2'
-
-  const stored = readConfig()
-
-  if (useWallet) {
-    say()
-    note('An EVM (Base) private key, or a Solana one in base58.')
-    warn('This key can spend money. It is stored locally in ~/.jarvisclaw/config.json.')
-    const key = await ask('wallet key: ', { secret: true })
-    if (!key) {
-      warn('Nothing entered; no change made.')
-      return 1
-    }
-
-    // Classify before storing, so a mistyped key is caught here rather than at the
-    // first payment attempt.
-    let kind: string
-    try {
-      kind = detectKeyType(key)
-    } catch (err) {
-      say(`${style.red('✗')} ${err instanceof Error ? err.message : String(err)}`)
-      return 1
-    }
-
-    const next = { ...stored, walletKey: key }
-    delete next.apiKey
-    const path = writeConfig(next)
-    ok(`${kind === 'solana' ? 'Solana' : 'EVM'} wallet key saved to ${path}`)
-    return verify({ ...config, walletKey: key, apiKey: undefined })
-  }
-
-  say()
-  note('Create one at https://jarvisclaw.ai (Settings → API keys).')
-  const key = await ask('api key: ', { secret: true })
-  if (!key) {
-    warn('Nothing entered; no change made.')
-    return 1
-  }
-
-  const next = { ...stored, apiKey: key }
-  delete next.walletKey
-  const path = writeConfig(next)
-  ok(`API key ${maskSecret(key)} saved to ${path}`)
-  return verify({ ...config, apiKey: key, walletKey: undefined })
-}
-
 /**
- * Confirm the credential actually works, before the user runs a real task.
+ * `ducat logout` — remove a stored credential.
  *
- * Worth the extra request: a bad key discovered here is a one-line fix, while the
- * same key discovered mid-task looks like the tool is broken.
+ * There is no `login` here any more. It used to offer "paste your private key",
+ * which is the prompt phishing imitates and which grants far more than a per-call
+ * budget needs. `ducat setup` replaced it: it generates a wallet rather than asking
+ * for one. `login` remains registered as an alias for setup, since it is the word
+ * people type.
  */
-async function verify(config: ResolvedConfig): Promise<number> {
-  const spin = spinner('checking the credential')
-  try {
-    const client = await buildClient(config)
-    const balance = await client.getBalanceUsd()
-    spin.stop()
+import { existsSync, rmSync } from 'node:fs'
+import { readConfig, writeConfig } from '../config.js'
+import { walletPath } from '../wallet.js'
+import { confirmYesNo, note, ok, say, warn } from '../ui.js'
 
-    if (client.address) ok(`wallet ${client.address}`)
-    ok(`balance ${formatUsd(balance)}`)
-
-    if (balance === 0) {
-      say()
-      warn('The balance is zero, so paid calls will be refused.')
-      note(`Free models still work: ${style.bold('jarvisclaw --model auto/free "hello"')}`)
-    } else {
-      say()
-      note(`Try: ${style.bold('jarvisclaw "what can you do?"')}`)
-    }
-    return 0
-  } catch (err) {
-    spin.stop()
-    say(`${style.red('✗')} ${err instanceof JarvisClawError ? err.message : String(err)}`)
-    say()
-    note('The credential was saved but could not be verified. Check it, or rerun login.')
-    return 1
-  }
-}
-
-/** `jarvisclaw logout` — remove stored credentials. */
 export async function logout(): Promise<number> {
   const stored = readConfig()
-  if (!stored.apiKey && !stored.walletKey) {
-    note('No stored credential to remove.')
+  const hasStored = Boolean(stored.apiKey ?? stored.walletKey)
+  const hasWallet = existsSync(walletPath())
+
+  if (!hasStored && !hasWallet) {
+    note('Nothing stored to remove.')
     return 0
   }
 
-  const what = stored.walletKey ? 'wallet key' : 'API key'
-  if (!(await confirmYesNo(`Remove the stored ${what}?`))) {
-    note('Left unchanged.')
-    return 0
+  if (hasStored) {
+    const what = stored.walletKey ? 'wallet key' : 'API key'
+    if (await confirmYesNo(`Remove the stored ${what}?`)) {
+      const next = { ...stored }
+      delete next.apiKey
+      delete next.walletKey
+      writeConfig(next)
+      ok(`Removed the stored ${what}.`)
+    } else {
+      note('Credential left unchanged.')
+    }
   }
 
-  const next = { ...stored }
-  delete next.apiKey
-  delete next.walletKey
-  writeConfig(next)
-  ok(`Removed the stored ${what}.`)
+  // The generated wallet is deliberately a separate question, and deliberately
+  // never removed by default. It can hold real USDC, deleting the file destroys
+  // the only key to it, and "logout" does not mean "burn my money" — someone
+  // clearing a credential to switch accounts would lose their balance.
+  if (hasWallet) {
+    say()
+    warn(`A local wallet remains at ${walletPath()}.`)
+    note('  It may hold USDC. Deleting the file destroys the only key to it.')
+    note('  Check it first with: ducat wallet   /   ducat balance')
+    if (await confirmYesNo('  Delete it anyway? This cannot be undone.')) {
+      // Asked twice on purpose. The first answer can be a reflex; this one is
+      // irreversible and unrecoverable.
+      if (await confirmYesNo('  Are you sure? Any USDC in it will be unrecoverable.')) {
+        rmSync(walletPath(), { force: true })
+        ok('Wallet file deleted.')
+      } else {
+        note('  Wallet kept.')
+      }
+    } else {
+      note('  Wallet kept.')
+    }
+  }
+
   note('Environment variables, if you have any set, are untouched.')
   return 0
 }

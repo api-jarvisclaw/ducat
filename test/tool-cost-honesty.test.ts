@@ -95,7 +95,7 @@ describe('anonymous tool set', () => {
     const system = (chatBodies[0] as { messages: Array<{ role: string; content: string }> }).messages
       .find((m) => m.role === 'system')!.content
     expect(system).toMatch(/no credential/i)
-    expect(system).toMatch(/jarvisclaw login/)
+    expect(system).toMatch(/ducat setup/)
   })
 })
 
@@ -125,7 +125,7 @@ describe('a 402 from a free-labelled tool', () => {
     const second = chatBodies[1] as { messages: Array<Record<string, unknown>> }
     const toolReply = second.messages.find((m) => m['role'] === 'tool')
     expect(String(toolReply?.['content'])).toMatch(/unavailable without a credential/)
-    expect(String(toolReply?.['content'])).toMatch(/jarvisclaw login/)
+    expect(String(toolReply?.['content'])).toMatch(/ducat setup/)
     expect(result.answer).toBe('You need to log in for that.')
   })
 

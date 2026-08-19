@@ -93,7 +93,7 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
     opts.anonymous
       ? 'This session has no credential, so only the free tools are available. ' +
         'Paid APIs, intent resolution and balance lookups need one — if the user ' +
-        'asks for those, say `jarvisclaw login` is needed rather than guessing at ' +
+        'asks for those, say `ducat setup` is needed rather than guessing at ' +
         'an answer.'
       : undefined,
   ]
@@ -223,7 +223,7 @@ async function runOneTool(
         return (
           `${call.name} is unavailable without a credential: the gateway wants ` +
           `payment for it (${err.message}). Do not retry it. Use a different tool, ` +
-          `and tell the user this one needs \`jarvisclaw login\`.`
+          `and tell the user this one needs \`ducat setup\`.`
         )
       }
       // On a genuinely paid tool the user did approve a charge, so being out of

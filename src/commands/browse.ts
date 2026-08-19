@@ -7,7 +7,7 @@
 import { JarvisClawError } from '@jarvisclaw/sdk'
 import { maskSecret, readConfig, type ResolvedConfig } from '../config.js'
 import { buildAnonymousClient, buildClient } from '../platform/factory.js'
-import { formatUsd, heading, note, say, spinner, style } from '../ui.js'
+import { formatPrice, formatUsd, heading, note, say, spinner, style } from '../ui.js'
 
 /** `jarvisclaw search <query>` — browse the catalogue. */
 export async function search(
@@ -38,7 +38,7 @@ export async function search(
     for (const item of page.items) {
       say(
         `${style.bold(item.name)} ${style.dim(item.serviceId)}  ` +
-          `${style.cyan(item.method)} ${formatUsd(item.pricePerCall)}`,
+          `${style.cyan(item.method)} ${formatPrice(item.pricePerCall)}`,
       )
       if (item.description) say(`  ${style.dim(item.description)}`)
     }
@@ -114,7 +114,7 @@ export async function agents(config: ResolvedConfig, opts: { search?: string } =
     for (const a of list) {
       say(
         `${style.bold(a.name)} ${style.dim(a.agentId)}` +
-          `${a.verified ? style.green(' ✓') : ''}  ${formatUsd(a.pricePerCall)}`,
+          `${a.verified ? style.green(' ✓') : ''}  ${formatPrice(a.pricePerCall)}`,
       )
       if (a.description) say(`  ${style.dim(a.description)}`)
       if (a.capabilities.length > 0) say(`  ${style.dim(a.capabilities.join(', '))}`)
@@ -126,7 +126,7 @@ export async function agents(config: ResolvedConfig, opts: { search?: string } =
   }
 }
 
-/** `jarvisclaw balance` — what is spendable. */
+/** `ducat balance` — what is spendable. */
 export async function balance(config: ResolvedConfig): Promise<number> {
   const spin = spinner('reading the balance')
   try {
@@ -170,7 +170,7 @@ export async function showConfig(config: ResolvedConfig): Promise<number> {
 
   heading('Credential')
   if (config.source.credential === 'none') {
-    say(`  ${style.dim('none — run `jarvisclaw login`')}`)
+    say(`  ${style.dim('none — run `ducat setup`')}`)
   } else {
     const kind = config.walletKey ? 'wallet key' : 'api key'
     const secret = config.walletKey ?? config.apiKey ?? ''

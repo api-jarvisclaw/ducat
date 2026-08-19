@@ -1,7 +1,7 @@
 /**
  * Argument parsing.
  *
- * Hand-rolled rather than a dependency: the grammar is small, and `npx jarvisclaw`
+ * Hand-rolled rather than a dependency: the grammar is small, and `npx ducat`
  * on a cold cache is the first impression this tool makes.
  */
 
@@ -15,9 +15,11 @@ export interface ParsedArgs {
     baseUrl?: string
     model?: string
     maxCallUsd?: number
+    maxSpendUsd?: number
     category?: string
     help: boolean
     version: boolean
+    confirmAll: boolean
   }
   /** A flag that was given wrongly, e.g. a value missing or unparseable. */
   error?: string
@@ -26,6 +28,8 @@ export interface ParsedArgs {
 const KNOWN_COMMANDS = new Set([
   'run',
   'chat',
+  'setup',
+  'wallet',
   'login',
   'logout',
   'search',
@@ -44,12 +48,13 @@ const VALUE_FLAGS: Record<string, keyof ParsedArgs['flags']> = {
   '--model': 'model',
   '-m': 'model',
   '--max-call': 'maxCallUsd',
+  '--max-spend': 'maxSpendUsd',
   '--category': 'category',
   '-c': 'category',
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const flags: ParsedArgs['flags'] = { help: false, version: false }
+  const flags: ParsedArgs['flags'] = { help: false, version: false, confirmAll: false }
   const positional: string[] = []
   let error: string | undefined
 
@@ -62,6 +67,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === '--version' || arg === '-v') {
       flags.version = true
+      continue
+    }
+    if (arg === '--confirm-all') {
+      flags.confirmAll = true
       continue
     }
 
@@ -77,15 +86,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
         error ??= `${name} needs a value`
         continue
       }
-      if (key === 'maxCallUsd') {
+      if (key === 'maxCallUsd' || key === 'maxSpendUsd') {
         const parsed = Number(value)
         // Rejected rather than ignored: silently dropping a spend ceiling the user
         // asked for would leave them believing a limit is in force when it is not.
         if (!Number.isFinite(parsed) || parsed <= 0) {
-          error ??= `--max-call needs a positive number of USD, got ${JSON.stringify(value)}`
+          error ??= `${name} needs a positive number of USD, got ${JSON.stringify(value)}`
           continue
         }
-        flags.maxCallUsd = parsed
+        flags[key] = parsed
       } else {
         flags[key] = value as never
       }
@@ -110,26 +119,29 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return { command, rest, flags, ...(error ? { error } : {}) }
 }
 
-export const HELP = `jarvisclaw — a terminal agent that calls things, not just chats
+export const HELP = `ducat — a terminal agent with its own wallet
 
 USAGE
-  jarvisclaw "<task>"          do something, then exit
-  jarvisclaw                   interactive session
-  jarvisclaw <command> [args]
+  ducat "<task>"               do something, then exit
+  ducat                        interactive session
+  ducat <command> [args]
 
 COMMANDS
-  login                        store an API key or wallet key
-  logout                       remove the stored credential
-  search <query>               browse the API catalogue (no login needed)
-  models                       list the models this gateway serves
-  agents [query]               other agents on the platform
+  setup                        create a wallet, or use a jarvisclaw.ai key
+  wallet                       your address, and how to fund it
   balance                      what is spendable
+  search <query>               browse the API catalogue (no setup needed)
+  models                       list models, marking which are free
+  agents [query]               other agents on the platform
   config                       settings in effect, and where they came from
+  logout                       remove a stored credential
 
 OPTIONS
   -m, --model <id>             model or virtual route (default: auto/free)
   -c, --category <name>        narrow a search
-      --max-call <usd>         refuse any single call above this
+      --max-call <usd>         confirm any single call above this (default 0.05)
+      --max-spend <usd>        stop the session at this total (default 1)
+      --confirm-all            confirm every paid call, however small
       --api-key <key>          use this key for one invocation
       --wallet-key <key>       use this wallet for one invocation
       --base-url <url>         a different gateway
@@ -137,17 +149,18 @@ OPTIONS
   -v, --version                version
 
 ENVIRONMENT
-  JARVISCLAW_API_KEY           api key
-  JARVISCLAW_WALLET_KEY        wallet private key (EVM hex or Solana base58)
-  JARVISCLAW_BASE_URL          gateway url
-  JARVISCLAW_MODEL             default model
+  DUCAT_API_KEY                api key
+  DUCAT_WALLET_KEY             wallet private key
+  DUCAT_BASE_URL               gateway url
+  DUCAT_MODEL                  default model
   NO_COLOR                     disable colour
 
 EXAMPLES
-  jarvisclaw "what can you do?"
-  jarvisclaw "find a weather api and check the forecast for Tokyo"
-  jarvisclaw search blockchain
-  jarvisclaw -m auto/premium "summarise this repo's architecture"
+  ducat "what's the weather in Tokyo right now?"
+  ducat "find a cheap web search api and look up x402"
+  ducat search blockchain
+  ducat --max-spend 0.20 "compare three image apis on price"
 
-Paid calls are always confirmed before they run. Searching and browsing are free.
+Free models and browsing need no setup at all. Paid calls come out of a wallet
+ducat creates for you — it holds only what you send it.
 `

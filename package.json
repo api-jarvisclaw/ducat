@@ -1,17 +1,17 @@
 {
-  "name": "jarvisclaw",
+  "name": "ducat",
   "version": "0.1.0",
-  "description": "A terminal AI agent that can actually call things — 4000+ APIs and 80+ models on JarvisClaw, paid per call over x402.",
+  "description": "A terminal AI agent with its own wallet — 4000+ APIs and 80+ models, paid per call over x402.",
   "license": "MIT",
   "author": "JarvisClaw",
   "homepage": "https://jarvisclaw.ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/api-jarvisclaw/jarvisclaw-cli.git"
+    "url": "git+https://github.com/api-jarvisclaw/ducat.git"
   },
-  "bugs": "https://github.com/api-jarvisclaw/jarvisclaw-cli/issues",
+  "bugs": "https://github.com/api-jarvisclaw/ducat/issues",
   "keywords": [
-    "jarvisclaw",
+    "ducat",
     "ai",
     "agent",
     "cli",
@@ -20,15 +20,14 @@
     "llm",
     "api",
     "marketplace",
-    "terminal"
+    "wallet"
   ],
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "bin": {
-    "jarvisclaw": "./dist/cli.js",
-    "jc": "./dist/cli.js"
+    "ducat": "./dist/cli.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

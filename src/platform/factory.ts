@@ -7,12 +7,12 @@ import { PlatformClient } from './client.js'
  * Build a client from a real credential, or explain that there is none.
  *
  * The SDK's own "no credential" error names environment variables; a first-time CLI
- * user needs to be pointed at `jarvisclaw login` instead.
+ * user needs to be pointed at `ducat setup` instead.
  */
 export async function buildClient(config: ResolvedConfig): Promise<PlatformClient> {
   if (!config.apiKey && !config.walletKey) {
     throw new JarvisClawError(
-      'No credential yet. Run `jarvisclaw login` to add an API key or a wallet key.',
+      'No credential yet. Run `ducat setup` to add an API key or a wallet key.',
     )
   }
 

@@ -2,7 +2,7 @@
  * Terminal output and prompts.
  *
  * Deliberately dependency-free: colours are raw ANSI and prompts use readline. The
- * CLI's whole pitch is `npx jarvisclaw` on a fresh machine, so every dependency is
+ * CLI's whole pitch is `npx ducat` on a fresh machine, so every dependency is
  * install time a beginner waits through before seeing anything.
  */
 import { createInterface } from 'node:readline/promises'
@@ -122,7 +122,19 @@ export async function ask(question: string, opts: { secret?: boolean } = {}): Pr
 
 /** A price the user is about to approve. Small amounts get more decimals. */
 export function formatUsd(usd: number): string {
-  if (usd === 0) return 'free'
+  // Zero is only "free" when it is a price. Used for a balance it read
+  // "free USDC", which says nothing about having no money.
+  if (usd === 0) return '$0.00'
   if (usd < 0.01) return `$${usd.toFixed(6)}`
   return `$${usd.toFixed(4)}`
+}
+
+/**
+ * A price, where zero means the call costs nothing.
+ *
+ * Separate from formatUsd because the two zeroes mean opposite things: a $0 price
+ * is good news, a $0 balance is not.
+ */
+export function formatPrice(usd: number): string {
+  return usd === 0 ? 'free' : formatUsd(usd)
 }

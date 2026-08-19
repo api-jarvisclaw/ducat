@@ -8,6 +8,7 @@
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { loadWallet } from './wallet.js'
 
 export const DEFAULT_GATEWAY = 'https://api.jarvisclaw.ai'
 /** Free tier virtual model — resolved by the gateway to a zero-cost model. */
@@ -20,6 +21,8 @@ export interface StoredConfig {
   model?: string
   /** Per-call ceiling in USD. Converted to base units when the client is built. */
   maxCallUsd?: number
+  /** Per-session total ceiling in USD. */
+  maxSpendUsd?: number
 }
 
 export interface ResolvedConfig {
@@ -31,13 +34,17 @@ export interface ResolvedConfig {
   baseUrl: string
   model: string
   maxCallUsd: number | undefined
-  /** Where the config came from, for `jarvisclaw config` to report honestly. */
-  source: { credential: 'flag' | 'env' | 'file' | 'none'; configPath: string }
+  maxSpendUsd: number | undefined
+  /** Where the config came from, for `ducat config` to report honestly. */
+  source: {
+    credential: 'flag' | 'env' | 'file' | 'wallet' | 'none'
+    configPath: string
+  }
 }
 
-/** `~/.jarvisclaw/config.json`. */
+/** `~/.ducat/config.json`. */
 export function configPath(): string {
-  return join(homedir(), '.jarvisclaw', 'config.json')
+  return join(homedir(), '.ducat', 'config.json')
 }
 
 export function readConfig(): StoredConfig {
@@ -75,31 +82,49 @@ export interface ConfigFlags {
   baseUrl?: string
   model?: string
   maxCallUsd?: number
+  maxSpendUsd?: number
+  /** Skip the generated wallet, for `setup` and for tests. */
+  ignoreWallet?: boolean
 }
 
 export function resolveConfig(flags: ConfigFlags = {}): ResolvedConfig {
   const stored = readConfig()
   const env = process.env
 
-  const apiKey = flags.apiKey ?? env['JARVISCLAW_API_KEY'] ?? stored.apiKey
-  const walletKey = flags.walletKey ?? env['JARVISCLAW_WALLET_KEY'] ?? stored.walletKey
+  // The generated wallet is last: an explicitly chosen credential always wins over
+  // one that happens to be lying on disk from an earlier `ducat setup`.
+  const generated = flags.ignoreWallet ? undefined : loadWallet()
+
+  const apiKey = flags.apiKey ?? env['DUCAT_API_KEY'] ?? env['JARVISCLAW_API_KEY'] ?? stored.apiKey
+  const walletKey =
+    flags.walletKey ??
+    env['DUCAT_WALLET_KEY'] ??
+    env['JARVISCLAW_WALLET_KEY'] ??
+    stored.walletKey ??
+    generated?.privateKey
 
   const credential: ResolvedConfig['source']['credential'] =
     flags.apiKey || flags.walletKey
       ? 'flag'
-      : env['JARVISCLAW_API_KEY'] || env['JARVISCLAW_WALLET_KEY']
+      : env['DUCAT_API_KEY'] ||
+          env['JARVISCLAW_API_KEY'] ||
+          env['DUCAT_WALLET_KEY'] ||
+          env['JARVISCLAW_WALLET_KEY']
         ? 'env'
         : stored.apiKey || stored.walletKey
           ? 'file'
-          : 'none'
+          : generated
+            ? 'wallet'
+            : 'none'
 
   return {
     ...(apiKey ? { apiKey } : {}),
     ...(walletKey ? { walletKey } : {}),
-    baseUrl: (flags.baseUrl ?? env['JARVISCLAW_BASE_URL'] ?? stored.baseUrl ?? DEFAULT_GATEWAY)
+    baseUrl: (flags.baseUrl ?? env['DUCAT_BASE_URL'] ?? env['JARVISCLAW_BASE_URL'] ?? stored.baseUrl ?? DEFAULT_GATEWAY)
       .replace(/\/+$/, ''),
-    model: flags.model ?? env['JARVISCLAW_MODEL'] ?? stored.model ?? DEFAULT_MODEL,
+    model: flags.model ?? env['DUCAT_MODEL'] ?? env['JARVISCLAW_MODEL'] ?? stored.model ?? DEFAULT_MODEL,
     maxCallUsd: flags.maxCallUsd ?? stored.maxCallUsd,
+    maxSpendUsd: flags.maxSpendUsd ?? stored.maxSpendUsd,
     source: { credential, configPath: configPath() },
   }
 }

@@ -81,6 +81,6 @@ describe('buildClient', () => {
   it('points a first-time user at login rather than at env vars', async () => {
     // The SDK's own message names environment variables, which is not the next step
     // for someone who just installed a CLI.
-    await expect(buildClient(resolveConfig())).rejects.toThrow(/jarvisclaw login/)
+    await expect(buildClient(resolveConfig())).rejects.toThrow(/ducat setup/)
   })
 })
