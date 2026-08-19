@@ -131,3 +131,68 @@ describe('freeModels()', () => {
     expect(await client.freeModels()).toEqual([])
   })
 })
+
+/**
+ * Video, image and music models bill per call and report BOTH token rates as 0. The
+ * mapping read those as a price, so `ducat models` printed "$0/M in · $0/M out" for
+ * bytedance/seedance-2.5 — which costs $1.575 a call. Understating a real charge as
+ * free is the worst direction for this to be wrong in, and it is not visible from
+ * the numbers alone: only `pricing_type` distinguishes the two.
+ */
+describe('per-call pricing', () => {
+  function perCallRow(model: string, fixed: number) {
+    return {
+      model,
+      // Exactly as the gateway reports it: zeroes that are not a price.
+      input_per_m_token_usd: 0,
+      output_per_m_token_usd: 0,
+      pricing_type: 'per-call',
+      fixed_price_usd: fixed,
+      currency: 'USDC',
+      free: false,
+    }
+  }
+
+  it('does not report a zero token rate as the price of a per-call model', async () => {
+    const { client } = await stubClient([
+      { path: DISCOVERY, body: { data: [perCallRow('bytedance/seedance-2.5', 1.575)] } },
+    ])
+    const [m] = await client.models()
+    expect(m!.inputPerMTokenUsd).toBeUndefined()
+    expect(m!.outputPerMTokenUsd).toBeUndefined()
+  })
+
+  it('carries the per-call price and says how the model bills', async () => {
+    const { client } = await stubClient([
+      { path: DISCOVERY, body: { data: [perCallRow('zai/cogview-4', 0.04)] } },
+    ])
+    const [m] = await client.models()
+    expect(m!.pricing).toBe('per-call')
+    expect(m!.fixedPriceUsd).toBe(0.04)
+    expect(m!.free).toBe(false)
+  })
+
+  it('still reports token rates for per-token models', async () => {
+    const { client } = await stubClient([
+      { path: DISCOVERY, body: { data: [discoveryRow('openai/gpt-5', false, 0.5)] } },
+    ])
+    const [m] = await client.models()
+    expect(m!.pricing).toBe('per-token')
+    expect(m!.inputPerMTokenUsd).toBe(0.5)
+    expect(m!.fixedPriceUsd).toBeUndefined()
+  })
+
+  it('treats a gateway that omits pricing_type as per-token', async () => {
+    // An older or self-hosted gateway may not send the field. Assuming per-call
+    // would discard real token rates.
+    const { client } = await stubClient([
+      {
+        path: DISCOVERY,
+        body: { data: [{ model: 'x/y', input_per_m_token_usd: 1, output_per_m_token_usd: 2 }] },
+      },
+    ])
+    const [m] = await client.models()
+    expect(m!.pricing).toBe('per-token')
+    expect(m!.inputPerMTokenUsd).toBe(1)
+  })
+})

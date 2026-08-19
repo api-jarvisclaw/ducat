@@ -11,8 +11,34 @@ import { dirname, join } from 'node:path'
 import { loadWallet } from './wallet.js'
 
 export const DEFAULT_GATEWAY = 'https://api.jarvisclaw.ai'
-/** Free tier virtual model — resolved by the gateway to a zero-cost model. */
-export const DEFAULT_MODEL = 'auto/free'
+/**
+ * Free tier virtual model — the gateway resolves it to a zero-cost model.
+ *
+ * The default for a caller with no credential, who has no other option: an
+ * anonymous request for anything else answers 402.
+ */
+export const FREE_MODEL = 'auto/free'
+
+/**
+ * The default once there is a credential: smart routing, so the gateway classifies
+ * the prompt and picks per request.
+ *
+ * Deliberately not a named model. Pinning one here would mean choosing on the
+ * user's behalf and being wrong in both directions — a cheap model on hard work, or
+ * a premium one on "what time is it". The gateway already does this classification
+ * and can be retuned without a CLI release.
+ *
+ * Deliberately not `auto/free` either, once someone has paid: a credentialed user
+ * silently confined to free models gets worse answers than they are paying for, and
+ * has no way to tell why.
+ */
+export const DEFAULT_MODEL = 'auto'
+
+/**
+ * Virtual routes the gateway resolves per request, cheapest first. Listed so the
+ * CLI can tell a route from a model name without asking the gateway.
+ */
+export const VIRTUAL_ROUTES = ['auto/free', 'auto/eco', 'auto', 'auto/premium'] as const
 
 export interface StoredConfig {
   apiKey?: string

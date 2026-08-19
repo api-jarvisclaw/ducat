@@ -1,6 +1,6 @@
 /** Builds a PlatformClient from resolved config. */
 import { JarvisClawError } from '@jarvisclaw-ai/sdk'
-import { usdToBaseUnits, type ResolvedConfig } from '../config.js'
+import { FREE_MODEL, usdToBaseUnits, type ResolvedConfig } from '../config.js'
 import { PlatformClient } from './client.js'
 
 /**
@@ -53,20 +53,35 @@ export async function buildAnonymousClient(config: ResolvedConfig): Promise<Plat
  * The model is forced to a free route in that mode: an anonymous request for a paid
  * model answers 402, and reporting "payment required" to someone who never asked to
  * pay is its own dead end.
+ *
+ * A credentialed user gets whatever they asked for, including a specific paid model.
+ * The default is `auto` — smart routing — rather than a pinned name, because the
+ * gateway classifies each prompt and the CLI has no better information. `downgraded`
+ * says whether the requested model was replaced, so the caller can explain the
+ * substitution instead of silently answering on something else.
  */
 export async function buildRunClient(config: ResolvedConfig): Promise<{
   client: PlatformClient
   model: string
   anonymous: boolean
+  downgraded: boolean
 }> {
   if (config.apiKey || config.walletKey) {
-    return { client: await buildClient(config), model: config.model, anonymous: false }
+    return {
+      client: await buildClient(config),
+      model: config.model,
+      anonymous: false,
+      downgraded: false,
+    }
   }
 
   const client = await PlatformClient.create({
     baseUrl: config.baseUrl,
     allowAnonymous: true,
   })
-  const model = config.model.startsWith('auto/free') ? config.model : 'auto/free'
-  return { client, model, anonymous: true }
+  // Only the free route survives without a credential. Note this compares against
+  // FREE_MODEL exactly rather than by prefix: `auto/free` is the one free route, and
+  // a prefix test would pass `auto/freewheeling` straight through to a 402.
+  const model = config.model === FREE_MODEL ? config.model : FREE_MODEL
+  return { client, model, anonymous: true, downgraded: model !== config.model }
 }

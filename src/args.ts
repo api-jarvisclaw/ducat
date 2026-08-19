@@ -20,6 +20,7 @@ export interface ParsedArgs {
     help: boolean
     version: boolean
     confirmAll: boolean
+    all: boolean
   }
   /** A flag that was given wrongly, e.g. a value missing or unparseable. */
   error?: string
@@ -54,7 +55,12 @@ const VALUE_FLAGS: Record<string, keyof ParsedArgs['flags']> = {
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
-  const flags: ParsedArgs['flags'] = { help: false, version: false, confirmAll: false }
+  const flags: ParsedArgs['flags'] = {
+    help: false,
+    version: false,
+    confirmAll: false,
+    all: false,
+  }
   const positional: string[] = []
   let error: string | undefined
 
@@ -71,6 +77,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
     }
     if (arg === '--confirm-all') {
       flags.confirmAll = true
+      continue
+    }
+    if (arg === '--all') {
+      flags.all = true
       continue
     }
 
@@ -131,14 +141,26 @@ COMMANDS
   wallet                       your address, and how to fund it
   balance                      what is spendable
   search <query>               browse the API catalogue (no setup needed)
-  models                       list models, marking which are free
+  models                       routes and models, cheapest first
   agents [query]               other agents on the platform
   config                       settings in effect, and where they came from
+  config set <key> <value>     change a default (model, max-call, max-spend)
   logout                       remove a stored credential
 
+MODELS
+  Smart routing picks a model per request, reading the prompt first:
+    auto                       balanced — the default once you have a credential
+    auto/free                  free models only — the default before setup
+    auto/eco                   cheapest paid models
+    auto/premium               strongest models, highest cost
+  Or name one yourself: ducat -m anthropic/claude-sonnet-4.6 "<task>"
+  See what is available with \`ducat models\`.
+
 OPTIONS
-  -m, --model <id>             model or virtual route (default: auto/free)
+  -m, --model <id>             model or smart route (default: auto, or auto/free
+                               before setup)
   -c, --category <name>        narrow a search
+      --all                    with \`models\`, list every paid model
       --max-call <usd>         confirm any single call above this (default 0.05)
       --max-spend <usd>        stop the session at this total (default 1)
       --confirm-all            confirm every paid call, however small
@@ -160,6 +182,8 @@ EXAMPLES
   ducat "find a cheap web search api and look up x402"
   ducat search blockchain
   ducat --max-spend 0.20 "compare three image apis on price"
+  ducat -m auto/premium "review this architecture and name the weak points"
+  ducat config set model auto/eco
 
 Free models and browsing need no setup at all. Paid calls come out of a wallet
 ducat creates for you — it holds only what you send it.
