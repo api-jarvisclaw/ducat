@@ -15,14 +15,28 @@ export const DEFAULT_MAX_ROUNDS = 8
 /**
  * Output budget per turn.
  *
- * Set because leaving it unset broke the free tier in practice: several free models
- * are reasoning models that think in the content field before emitting a tool call,
- * and against the provider's small default they spent the entire budget reasoning
- * and returned `finish_reason: length` with no tool call at all — the agent
- * described the API it should call instead of calling it. Generous enough for a
- * reasoning preamble plus the call.
+ * Set at all because leaving it unset broke the free tier in practice: several free
+ * models are reasoning models that think in the content field before emitting a tool
+ * call, and against the provider's small default they spent the entire budget
+ * reasoning and returned `finish_reason: length` with no tool call at all — the agent
+ * described the API it should call instead of calling it.
+ *
+ * Set to 1536 rather than 4096 because on a paid model this number IS the price.
+ * x402 prepays, so the gateway must quote the worst case: cost is
+ * (input_tokens × input_price + max_tokens × output_price), and EIP-3009 authorizes
+ * an exact value that cannot be reduced afterwards. Asking for 4096 and using 500
+ * pays for 4096. That is not a gateway bug — a prepaid protocol has nothing else to
+ * quote — but it made one agent turn cost $0.553 and a four-round task $2.2, for a
+ * few cents of actual work.
+ *
+ * 1536 comes from measured output, not from taste. Over 7 days of production logs the
+ * busiest free model averaged 466 completion tokens with a p95 of 968 and a maximum
+ * of 1818; the paid models in the same window ran lower. 1536 clears p95 with room
+ * for a reasoning preamble while cutting the quote to $0.207 — and the round-limit
+ * path already asks for a final answer with tools withheld, so a turn that does hit
+ * the ceiling degrades to a shorter reply rather than to nothing.
  */
-export const DEFAULT_MAX_TOKENS = 4096
+export const DEFAULT_MAX_TOKENS = 1536
 
 export interface RunnerOptions {
   client: PlatformClient
@@ -56,9 +70,22 @@ export interface RunResult {
 /**
  * The system prompt.
  *
- * Written to counter the two failure modes that make an agent useless to a
- * beginner: explaining an API instead of calling it, and inventing a resource id
- * or price rather than looking one up.
+ * Written to counter the failure modes that make an agent useless to a beginner:
+ * explaining an API instead of calling it, inventing a resource id or price rather
+ * than looking one up, and — the one that cost a whole live run — asking for
+ * permission in prose.
+ *
+ * The consent paragraph is the load-bearing part. It used to read "The user is
+ * asked to approve every paid call", describing what the CLI does. The model read
+ * that as its own job: it would run search_apis and get_api_detail, then write
+ * "shall I proceed?" and stop. The turn was over, so the user only saw that
+ * question afterwards and had nothing to answer it with — the task never ran and
+ * the payment path was never reached.
+ *
+ * Measured on the same free model with stubbed tool results, 7 tools, one prompt:
+ * the old wording reached call_api in 2 of 6 runs, the wording below in 6 of 6.
+ * The point is not politeness — a question the model asks itself is a dead end,
+ * and it has to be told so explicitly.
  */
 function systemPrompt(suffix?: string): string {
   return [
@@ -70,9 +97,11 @@ function systemPrompt(suffix?: string): string {
     '- Never invent a model id, resource id, price or API name. Look them up with',
     '  list_models, search_apis and get_api_detail. These are free, so there is no',
     '  reason to guess.',
-    '- Before invoking a paid API, call get_api_detail so the user is shown the real',
-    '  price. The user is asked to approve every paid call; if they decline, say so',
-    '  plainly and suggest a free alternative if one exists.',
+    '- Before invoking a paid API, call get_api_detail so the price is known. Then',
+    '  CALL IT. Do not ask for permission in your reply: the CLI asks the user for',
+    '  you, and it cannot ask until you make the call. A question in your text ends',
+    '  the turn, so the user reads it with no way to answer and nothing runs. If they',
+    '  decline, the tool result will tell you so and you can say it plainly.',
     '- Many users here are new to this. Explain what you are about to do in one short',
     '  sentence before doing it, and say what it cost afterwards. No jargon they did',
     '  not use first.',

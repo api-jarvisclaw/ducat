@@ -4,6 +4,39 @@ import { FREE_MODEL, usdToBaseUnits, type ResolvedConfig } from '../config.js'
 import { PlatformClient } from './client.js'
 
 /**
+ * The signing cap handed to the SDK — a refusal, not a prompt.
+ *
+ * `--max-call` used to be passed here directly, which made one number do two
+ * incompatible jobs. It is documented as "confirm any single call above this", and
+ * the SpendPolicy does use it that way; but the SDK treats its cap as a hard refuse
+ * before signing, so a call above the number could never be approved, only rejected
+ * with a message about base units the user never mentioned. That is what a real run
+ * hit: `--max-call 0.20` on an agent turn quoted at $0.553 died at
+ * "exceeds the client safety cap", with no chance to say yes.
+ *
+ * The two now separate. `--max-call` remains the confirm threshold — a question. The
+ * signing cap is derived from the session limit, which is the number that genuinely
+ * cannot be exceeded: nothing above it can be spent even with approval, so refusing
+ * to sign it loses nothing. Falls back to the SDK's own default when neither is set.
+ */
+export function hardCapUsd(config: ResolvedConfig): number {
+  if (config.maxSpendUsd !== undefined) return config.maxSpendUsd
+  // No session limit configured: SpendPolicy still applies its own default, and this
+  // cap only has to be high enough not to pre-empt the confirmation prompt.
+  return DEFAULT_HARD_CAP_USD
+}
+
+/**
+ * The signing cap when no session limit is configured.
+ *
+ * Deliberately not unlimited: an unbounded cap means a mispriced or malicious quote
+ * gets signed without anyone seeing the number first. $100 matches the SDK's own
+ * default, so this changes nothing for callers who never set a limit — it just states
+ * the value here instead of leaving the field off.
+ */
+export const DEFAULT_HARD_CAP_USD = 100
+
+/**
  * Build a client from a real credential, or explain that there is none.
  *
  * The SDK's own "no credential" error names environment variables; a first-time CLI
@@ -20,9 +53,7 @@ export async function buildClient(config: ResolvedConfig): Promise<PlatformClien
     ...(config.apiKey ? { apiKey: config.apiKey } : {}),
     ...(config.walletKey ? { privateKey: config.walletKey } : {}),
     baseUrl: config.baseUrl,
-    ...(config.maxCallUsd === undefined
-      ? {}
-      : { maxAmountBaseUnits: usdToBaseUnits(config.maxCallUsd) }),
+    maxAmountBaseUnits: usdToBaseUnits(hardCapUsd(config)),
   })
 }
 

@@ -11,8 +11,13 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseArgs } from '../src/args.js'
-import { DEFAULT_MODEL, FREE_MODEL, VIRTUAL_ROUTES, resolveConfig } from '../src/config.js'
-import { buildRunClient } from '../src/platform/factory.js'
+import {
+  DEFAULT_MODEL,
+  FREE_MODEL,
+  VIRTUAL_ROUTES,
+  resolveConfig,
+} from '../src/config.js'
+import { DEFAULT_HARD_CAP_USD, buildRunClient, hardCapUsd } from '../src/platform/factory.js'
 import { setConfig } from '../src/commands/browse.js'
 
 const ENV_KEYS = ['JARVISCLAW_MODEL', 'JARVISCLAW_MODEL', 'JARVISCLAW_API_KEY', 'JARVISCLAW_API_KEY']
@@ -195,5 +200,51 @@ describe('config set', () => {
     const stored = JSON.parse(readFileSync(join(home, '.jarvisclaw', 'config.json'), 'utf8'))
     expect(stored.maxCallUsd).toBe(0.5)
     expect(stored.model).toBe('auto/premium')
+  })
+})
+
+/**
+ * `--max-call` used to do two incompatible jobs. It is documented as "confirm any
+ * single call above this", and SpendPolicy does treat it that way — but it was also
+ * handed to the SDK as `maxAmountBaseUnits`, which is a hard refusal before signing.
+ * So a call above the number could never be approved, only rejected:
+ *
+ *   $ jarvisclaw --max-call 0.20 --max-spend 0.50 "..."
+ *   ✗ x402: amount 559215 exceeds the client safety cap of 200000 base units
+ *
+ * The user was never asked. The signing cap now comes from the session limit, which
+ * is the number that genuinely cannot be exceeded even with approval.
+ */
+describe('the signing cap versus the confirm threshold', () => {
+  it('does not let --max-call refuse a call before the user is asked', () => {
+    const config = resolveConfig({ apiKey: 'sk-test', maxCallUsd: 0.2, maxSpendUsd: 0.5 })
+    // A quote above the confirm threshold but within the session limit must still be
+    // signable — the prompt decides it, not a pre-emptive refusal in the SDK.
+    expect(hardCapUsd(config)).toBeGreaterThan(0.2)
+  })
+
+  it('takes the signing cap from the session limit', () => {
+    const config = resolveConfig({ apiKey: 'sk-test', maxCallUsd: 0.05, maxSpendUsd: 0.5 })
+    expect(hardCapUsd(config)).toBe(0.5)
+  })
+
+  it('still refuses a quote above the session limit', () => {
+    // Nothing above the session limit can be spent even with approval, so refusing to
+    // sign it costs nothing and stops a mispriced quote being authorized.
+    expect(hardCapUsd(resolveConfig({ apiKey: 'sk-test', maxSpendUsd: 0.3 }))).toBe(0.3)
+  })
+
+  it('caps at a stated default when no session limit is set', () => {
+    // Not unlimited: an unbounded cap signs whatever a mispriced or hostile quote asks
+    // for, with nobody seeing the number first.
+    expect(hardCapUsd(resolveConfig({ apiKey: 'sk-test' }))).toBe(DEFAULT_HARD_CAP_USD)
+    expect(DEFAULT_HARD_CAP_USD).toBeGreaterThan(0)
+  })
+
+  it('is never driven by the per-call threshold alone', () => {
+    // The regression is one number doing both jobs. If the cap ever equals maxCallUsd
+    // again, a call above it dies before the user is asked.
+    const config = resolveConfig({ apiKey: 'sk-test', maxCallUsd: 0.05 })
+    expect(hardCapUsd(config)).not.toBe(0.05)
   })
 })
