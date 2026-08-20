@@ -276,7 +276,28 @@ describe('the agent loop', () => {
     const first = chatBodies[0] as { messages: Array<{ role: string; content: string }> }
     const system = first.messages.find((m) => m.role === 'system')?.content ?? ''
     expect(system).toMatch(/Never invent/)
-    expect(system).toMatch(/approve every paid call/)
+  })
+
+  it('tells the model the CLI asks for consent, not the model', async () => {
+    // This used to assert /approve every paid call/, the wording of a prompt that
+    // said "The user is asked to approve every paid call". The model read that as its
+    // own job: it would look up the price, write "shall I proceed?" and stop. The
+    // turn was over, so the user saw the question with nothing to answer it with, and
+    // the task never ran — observed three times in a row on a live run.
+    //
+    // Asserted on the instruction that fixes it rather than on prose, so a future
+    // rewrite cannot quietly drop the point while keeping the paragraph.
+    const { chatBodies } = await runWith([answerResponse('ok')])
+    const first = chatBodies[0] as { messages: Array<{ role: string; content: string }> }
+    const system = first.messages.find((m) => m.role === 'system')?.content ?? ''
+    // The prompt is hard-wrapped, so match against the unwrapped text: a phrase can
+    // otherwise straddle a newline and a passing assertion would only mean the break
+    // happened to fall elsewhere.
+    const flat = system.replace(/\s+/g, ' ')
+    expect(flat).toMatch(/Do not ask for permission in your reply/)
+    expect(flat).toMatch(/the CLI asks the user for you/)
+    // And it must not go back to describing consent as something the model arranges.
+    expect(system).not.toMatch(/user is asked to approve/)
   })
 
   it('defaults to a bounded number of rounds', () => {

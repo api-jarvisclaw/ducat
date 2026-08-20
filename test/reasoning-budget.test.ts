@@ -93,8 +93,22 @@ describe('output budget', () => {
 
   it('is generous enough for a reasoning preamble plus a tool call', () => {
     // The stalled production turn produced 512 completion tokens of reasoning and
-    // still had not emitted the call.
-    expect(DEFAULT_MAX_TOKENS).toBeGreaterThanOrEqual(2048)
+    // still had not emitted the call, so the budget has to clear that with room.
+    //
+    // The floor was 2048 while this number was only about capability. It is also the
+    // price: x402 prepays, the gateway quotes max_tokens × output_price, and EIP-3009
+    // authorizes an exact value that cannot be reduced after the fact — so an unused
+    // budget is money gone. 4096 made one agent turn cost $0.553.
+    //
+    // 1024 is the floor now, from measurement rather than taste. Over 7 days of
+    // production logs the busiest free model averaged 466 completion tokens, p95 968,
+    // max 1818. Probed serially against the live gateway with the real toolset, both
+    // 1536 and 1024 reached call_api 5/5 with zero truncated turns, so the stall does
+    // not return at either. The default sits at 1536 to clear p95 outright.
+    expect(DEFAULT_MAX_TOKENS).toBeGreaterThanOrEqual(1024)
+    // And an upper bound, because the reason this number is not simply "as large as
+    // possible" is that every unused token is charged for.
+    expect(DEFAULT_MAX_TOKENS).toBeLessThanOrEqual(2048)
   })
 
   it('sends the budget on the forced final turn too', async () => {
