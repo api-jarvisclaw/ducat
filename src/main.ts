@@ -8,7 +8,7 @@ import { runInteractive, runOnce } from './commands/run.js'
 import { resolveConfig } from './config.js'
 import { note, say, style } from './ui.js'
 
-const VERSION = '0.1.0'
+const VERSION = '0.1.1'
 
 /** Run one invocation and return the process exit code. Never calls process.exit. */
 export async function main(argv: string[]): Promise<number> {
