@@ -1,5 +1,5 @@
 /** Builds a PlatformClient from resolved config. */
-import { JarvisClawError } from '@jarvisclaw-ai/sdk'
+import { JarvisClawError, type PaymentApprover } from '@jarvisclaw-ai/sdk'
 import { FREE_MODEL, usdToBaseUnits, type ResolvedConfig } from '../config.js'
 import { PlatformClient } from './client.js'
 
@@ -42,7 +42,10 @@ export const DEFAULT_HARD_CAP_USD = 100
  * The SDK's own "no credential" error names environment variables; a first-time CLI
  * user needs to be pointed at `jarvisclaw setup` instead.
  */
-export async function buildClient(config: ResolvedConfig): Promise<PlatformClient> {
+export async function buildClient(
+  config: ResolvedConfig,
+  opts: { approvePayment?: PaymentApprover } = {},
+): Promise<PlatformClient> {
   if (!config.apiKey && !config.walletKey) {
     throw new JarvisClawError(
       'No credential yet. Run `jarvisclaw setup` to add an API key or a wallet key.',
@@ -54,6 +57,7 @@ export async function buildClient(config: ResolvedConfig): Promise<PlatformClien
     ...(config.walletKey ? { privateKey: config.walletKey } : {}),
     baseUrl: config.baseUrl,
     maxAmountBaseUnits: usdToBaseUnits(hardCapUsd(config)),
+    ...(opts.approvePayment ? { approvePayment: opts.approvePayment } : {}),
   })
 }
 
@@ -91,7 +95,10 @@ export async function buildAnonymousClient(config: ResolvedConfig): Promise<Plat
  * says whether the requested model was replaced, so the caller can explain the
  * substitution instead of silently answering on something else.
  */
-export async function buildRunClient(config: ResolvedConfig): Promise<{
+export async function buildRunClient(
+  config: ResolvedConfig,
+  opts: { approvePayment?: PaymentApprover } = {},
+): Promise<{
   client: PlatformClient
   model: string
   anonymous: boolean
@@ -99,7 +106,7 @@ export async function buildRunClient(config: ResolvedConfig): Promise<{
 }> {
   if (config.apiKey || config.walletKey) {
     return {
-      client: await buildClient(config),
+      client: await buildClient(config, opts),
       model: config.model,
       anonymous: false,
       downgraded: false,

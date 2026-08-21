@@ -51,7 +51,7 @@
     "prepublishOnly": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
-    "@jarvisclaw-ai/sdk": "^0.1.0",
+    "@jarvisclaw-ai/sdk": "^0.2.0",
     "viem": "^2.21.0"
   },
   "devDependencies": {

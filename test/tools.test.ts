@@ -123,30 +123,30 @@ describe('call_api', () => {
     { path: '/v1/network/execute', body: { temperature_c: 21 } },
   ]
 
-  it('asks before spending, quoting the live catalogue price', async () => {
+  // call_api no longer asks for approval itself. The spend gate moved to the payment
+  // layer, where it sees EVERY x402 charge — including the LLM reasoning turns, which
+  // is what let six of them at ~$0.21 past a $0.05 per-call limit. Asking here as
+  // well would charge the policy twice for one call and would quote the CATALOGUE
+  // price while the gateway signs its own quote.
+  //
+  // See test/spend-gate-covers-llm.test.ts for the gate itself.
+  it('does not ask for approval itself — the payment layer gates that now', async () => {
     const { ctx, asked } = await ctxFor(routes)
     await tools['call_api']!.run({ resource_id: 456, payload: { city: 'Tokyo' } }, ctx)
-    expect(asked).toHaveLength(1)
-    expect(asked[0]).toEqual({ toolName: 'call_api', priceUsd: 0.0115 })
+    expect(asked, 'a second prompt here would double-charge the session total').toHaveLength(0)
   })
 
-  it('does not call the paid endpoint when the user declines', async () => {
-    const { ctx, calls } = await ctxFor(routes, false)
-    const out = await tools['call_api']!.run({ resource_id: 456 }, ctx)
-    expect(out).toMatch(/declined/)
-    expect(calls.some((c) => c.url.includes('/v1/network/execute'))).toBe(false)
-  })
-
-  it('re-reads the price rather than trusting what the model passed', async () => {
-    // The model may have read a price several turns ago. The user approves a
-    // number, so it has to be the live one.
-    const { ctx, asked, calls } = await ctxFor([
+  it('still reads the live price, so the logged number is not a stale one', async () => {
+    // The lookup survives the move: the model may have read a price several turns
+    // ago, and it is also how a withdrawn resource is caught before any payment is
+    // attempted.
+    const { ctx, calls } = await ctxFor([
       { path: '/api/marketplace/apis/456', body: { data: catalogueItem({ display_price: 0.5 }) } },
       { path: '/v1/network/execute', body: { ok: true } },
     ])
     await tools['call_api']!.run({ resource_id: 456 }, ctx)
-    expect(asked[0]?.priceUsd).toBe(0.5)
     expect(calls[0]!.url).toContain('/api/marketplace/apis/456')
+    expect(calls.some((c) => c.url.includes('/v1/network/execute'))).toBe(true)
   })
 
   it('refuses a resource that is no longer in the catalogue', async () => {

@@ -5,7 +5,7 @@
  * cycle the user never sees, so there is a hard cap on rounds and a per-session
  * spend ceiling that stops the loop rather than warning about it.
  */
-import { APIError, InsufficientBalanceError } from '@jarvisclaw-ai/sdk'
+import { APIError, InsufficientBalanceError, PaymentDeclinedError } from '@jarvisclaw-ai/sdk'
 import type { ChatMessage, PlatformClient } from '../platform/client.js'
 import { toolSchemas, tools, type ConfirmFn } from './tools.js'
 
@@ -38,6 +38,52 @@ export const DEFAULT_MAX_ROUNDS = 8
  */
 export const DEFAULT_MAX_TOKENS = 1536
 
+/**
+ * Output budget for a turn whose job is to pick a tool, on a PAID model.
+ *
+ * Reserving the full DEFAULT_MAX_TOKENS for every turn is what made a single question
+ * cost $1.47. Measured against the gateway: at max_tokens=1536 one turn on
+ * google/gemini-3.5-flash is quoted $0.2074, and six turns come to $1.24 — 83% of the
+ * bill is this reservation, not the growing context (~$0.017 across the same six).
+ *
+ * The reservation was 91% waste. In that same run the turns actually produced 26, 37,
+ * 120, 134, 229 and 257 completion tokens — mean 134 against 1536 reserved. A turn
+ * that emits a tool call does not need room for prose; it needs room for a short
+ * preamble and a JSON function call.
+ *
+ * 640 rather than 256: the reasoning models that DEFAULT_MAX_TOKENS was raised for
+ * think in the content field before emitting the call, and cutting to the observed
+ * mean would truncate exactly those. 640 clears the largest observed tool turn (257)
+ * with 2.5x headroom, and a turn that still hits the ceiling is handled — the loop
+ * reports finish_reason: length rather than presenting prose as an answer.
+ *
+ * Applies ONLY when the turn is being paid for per token. On a free model the budget
+ * costs nothing, so the generous value stays where it was measured to be needed. See
+ * budgetFor.
+ */
+export const TOOL_TURN_MAX_TOKENS = 640
+
+/**
+ * The output budget for one turn.
+ *
+ * `final` is the answer the user reads, and gets the full budget: a truncated answer
+ * is the failure this budget exists to prevent. A tool-selection turn gets the
+ * smaller one, but only when it is paid per token — the trimming exists to stop
+ * paying for 1536 tokens to receive 134, and on a free model there is nothing to
+ * save and a reasoning preamble to protect.
+ */
+function budgetFor(
+  kind: 'tool' | 'final',
+  opts: { maxTokens?: number; anonymous?: boolean },
+): number {
+  // An explicit budget is the caller's decision and is never second-guessed.
+  if (opts.maxTokens !== undefined) return opts.maxTokens
+  if (kind === 'final') return DEFAULT_MAX_TOKENS
+  // Anonymous means the free tier, where max_tokens is not the price.
+  if (opts.anonymous) return DEFAULT_MAX_TOKENS
+  return TOOL_TURN_MAX_TOKENS
+}
+
 export interface RunnerOptions {
   client: PlatformClient
   model: string
@@ -65,6 +111,31 @@ export interface RunResult {
   hitRoundLimit: boolean
   /** True when the model hit its output budget instead of finishing. */
   truncated: boolean
+  /**
+   * True when a spend ceiling (or the user) declined a charge and ended the run.
+   *
+   * Reported separately from the other stop reasons because it is the only one the
+   * user chose: the answer is incomplete on purpose, and telling them to raise the
+   * limit is useful where "the model ran out of budget" would be misleading.
+   */
+  stoppedBySpendLimit?: boolean
+}
+
+/**
+ * What to say when a spend ceiling stopped the run.
+ *
+ * Names the work already done, because it was paid for: a bare "declined" hides the
+ * fact that the earlier rounds produced something.
+ */
+function buildDeclinedAnswer(toolsUsed: string[], detail: string): string {
+  const done =
+    toolsUsed.length > 0
+      ? ` Work completed before stopping: ${toolsUsed.join(', ')}.`
+      : ''
+  return (
+    `Stopped without finishing: the next step was declined (${detail}).${done} ` +
+    `Raise the ceiling with --max-spend or --max-call to continue.`
+  )
 }
 
 /**
@@ -138,17 +209,73 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
   const ctx = { client: opts.client, confirm: opts.confirm, log: opts.log }
 
   for (let round = 1; round <= maxRounds; round++) {
-    const turn = await opts.client.chat({
-      model: opts.model,
-      messages,
-      tools: schemas,
-      maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    })
+    let turn
+    try {
+      turn = await opts.client.chat({
+        model: opts.model,
+        messages,
+        tools: schemas,
+        // A turn offered tools is a tool-selection turn: it may answer directly, but
+        // it does not need room for a full reply to do so, and this is the turn that
+        // repeats. The wrap-up call below keeps the full budget.
+        maxTokens: budgetFor('tool', opts),
+      })
+    } catch (err) {
+      // The reasoning turn itself now passes the spend gate, so it can be declined —
+      // by the session limit or by the user. That is a stop, not a crash: report what
+      // the work already produced instead of throwing away the rounds paid for.
+      if (err instanceof PaymentDeclinedError) {
+        return {
+          answer: buildDeclinedAnswer(toolsUsed, err.message),
+          toolsUsed,
+          rounds: round,
+          hitRoundLimit: false,
+          truncated: false,
+          stoppedBySpendLimit: true,
+        }
+      }
+      throw err
+    }
 
     // A reasoning model that runs out of budget mid-thought returns prose and no
     // tool call, so the task silently becomes a description of what should have
     // happened. Saying so beats presenting that as the answer.
     if (turn.finishReason === 'length' && turn.toolCalls.length === 0) {
+      // The tool-turn budget is deliberately small, and a turn that chose to ANSWER
+      // rather than call a tool can legitimately need more room than it was given.
+      // Retry once at the full budget before giving up: without this, trimming the
+      // reserve would have bought a cheaper run by truncating real answers, which is
+      // not a saving — it is the same failure the budget exists to prevent.
+      const toolBudget = budgetFor('tool', opts)
+      const fullBudget = budgetFor('final', opts)
+      if (fullBudget > toolBudget) {
+        try {
+          const retry = await opts.client.chat({
+            model: opts.model,
+            messages,
+            maxTokens: fullBudget,
+          })
+          return {
+            answer:
+              retry.content.trim() ||
+              'The model stopped before answering — it used its whole output budget.',
+            toolsUsed,
+            rounds: round,
+            hitRoundLimit: false,
+            truncated: retry.finishReason === 'length',
+          }
+        } catch (err) {
+          if (!(err instanceof PaymentDeclinedError)) throw err
+          return {
+            answer: buildDeclinedAnswer(toolsUsed, err.message),
+            toolsUsed,
+            rounds: round,
+            hitRoundLimit: false,
+            truncated: false,
+            stoppedBySpendLimit: true,
+          }
+        }
+      }
       return {
         answer:
           turn.content.trim() ||
@@ -191,19 +318,37 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
 
   // Out of rounds with tools still pending. Ask once more with tools withheld, so
   // the user gets an answer built from the work already done instead of nothing.
-  const final = await opts.client.chat({
-    model: opts.model,
-    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    messages: [
-      ...messages,
-      {
-        role: 'user',
-        content:
-          'Stop calling tools and answer now with what you have. Say plainly if the ' +
-          'task is unfinished and what remains.',
-      },
-    ],
-  })
+  let final
+  try {
+    final = await opts.client.chat({
+      model: opts.model,
+      // Full budget: this is the answer the user reads.
+      maxTokens: budgetFor('final', opts),
+      messages: [
+        ...messages,
+        {
+          role: 'user',
+          content:
+            'Stop calling tools and answer now with what you have. Say plainly if the ' +
+            'task is unfinished and what remains.',
+        },
+      ],
+    })
+  } catch (err) {
+    // This wrap-up turn costs money too, so the ceiling can land exactly here — the
+    // worst place to throw, since every round has already been paid for.
+    if (err instanceof PaymentDeclinedError) {
+      return {
+        answer: buildDeclinedAnswer(toolsUsed, err.message),
+        toolsUsed,
+        rounds: maxRounds,
+        hitRoundLimit: true,
+        truncated: false,
+        stoppedBySpendLimit: true,
+      }
+    }
+    throw err
+  }
   return {
     answer: final.content,
     toolsUsed,
@@ -258,6 +403,18 @@ async function runOneTool(
       // On a genuinely paid tool the user did approve a charge, so being out of
       // funds is terminal: every further attempt fails identically.
       throw err
+    }
+    // A declined charge is a decision, not a fault. The spend gate lives at the
+    // payment layer now, so a refusal arrives here as a thrown error rather than as
+    // a false return from the tool's own confirm — and it must not end the session:
+    // the model can still answer from what it has, or say plainly that the user
+    // declined. Rethrowing would abort a run the user only meant to keep cheap.
+    if (err instanceof PaymentDeclinedError) {
+      return (
+        `${call.name} was not run: the charge was declined (${err.message}). ` +
+        `Do not retry it. Tell the user plainly, and answer with what you already ` +
+        `have if you can.`
+      )
     }
     if (err instanceof APIError) {
       return `${call.name} failed: ${err.message} (HTTP ${err.statusCode}). Do not retry this unchanged.`
