@@ -38,6 +38,52 @@ export const DEFAULT_MAX_ROUNDS = 8
  */
 export const DEFAULT_MAX_TOKENS = 1536
 
+/**
+ * Output budget for a turn whose job is to pick a tool, on a PAID model.
+ *
+ * Reserving the full DEFAULT_MAX_TOKENS for every turn is what made a single question
+ * cost $1.47. Measured against the gateway: at max_tokens=1536 one turn on
+ * google/gemini-3.5-flash is quoted $0.2074, and six turns come to $1.24 — 83% of the
+ * bill is this reservation, not the growing context (~$0.017 across the same six).
+ *
+ * The reservation was 91% waste. In that same run the turns actually produced 26, 37,
+ * 120, 134, 229 and 257 completion tokens — mean 134 against 1536 reserved. A turn
+ * that emits a tool call does not need room for prose; it needs room for a short
+ * preamble and a JSON function call.
+ *
+ * 640 rather than 256: the reasoning models that DEFAULT_MAX_TOKENS was raised for
+ * think in the content field before emitting the call, and cutting to the observed
+ * mean would truncate exactly those. 640 clears the largest observed tool turn (257)
+ * with 2.5x headroom, and a turn that still hits the ceiling is handled — the loop
+ * reports finish_reason: length rather than presenting prose as an answer.
+ *
+ * Applies ONLY when the turn is being paid for per token. On a free model the budget
+ * costs nothing, so the generous value stays where it was measured to be needed. See
+ * budgetFor.
+ */
+export const TOOL_TURN_MAX_TOKENS = 640
+
+/**
+ * The output budget for one turn.
+ *
+ * `final` is the answer the user reads, and gets the full budget: a truncated answer
+ * is the failure this budget exists to prevent. A tool-selection turn gets the
+ * smaller one, but only when it is paid per token — the trimming exists to stop
+ * paying for 1536 tokens to receive 134, and on a free model there is nothing to
+ * save and a reasoning preamble to protect.
+ */
+function budgetFor(
+  kind: 'tool' | 'final',
+  opts: { maxTokens?: number; anonymous?: boolean },
+): number {
+  // An explicit budget is the caller's decision and is never second-guessed.
+  if (opts.maxTokens !== undefined) return opts.maxTokens
+  if (kind === 'final') return DEFAULT_MAX_TOKENS
+  // Anonymous means the free tier, where max_tokens is not the price.
+  if (opts.anonymous) return DEFAULT_MAX_TOKENS
+  return TOOL_TURN_MAX_TOKENS
+}
+
 export interface RunnerOptions {
   client: PlatformClient
   model: string
@@ -169,7 +215,10 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
         model: opts.model,
         messages,
         tools: schemas,
-        maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+        // A turn offered tools is a tool-selection turn: it may answer directly, but
+        // it does not need room for a full reply to do so, and this is the turn that
+        // repeats. The wrap-up call below keeps the full budget.
+        maxTokens: budgetFor('tool', opts),
       })
     } catch (err) {
       // The reasoning turn itself now passes the spend gate, so it can be declined —
@@ -192,6 +241,41 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
     // tool call, so the task silently becomes a description of what should have
     // happened. Saying so beats presenting that as the answer.
     if (turn.finishReason === 'length' && turn.toolCalls.length === 0) {
+      // The tool-turn budget is deliberately small, and a turn that chose to ANSWER
+      // rather than call a tool can legitimately need more room than it was given.
+      // Retry once at the full budget before giving up: without this, trimming the
+      // reserve would have bought a cheaper run by truncating real answers, which is
+      // not a saving — it is the same failure the budget exists to prevent.
+      const toolBudget = budgetFor('tool', opts)
+      const fullBudget = budgetFor('final', opts)
+      if (fullBudget > toolBudget) {
+        try {
+          const retry = await opts.client.chat({
+            model: opts.model,
+            messages,
+            maxTokens: fullBudget,
+          })
+          return {
+            answer:
+              retry.content.trim() ||
+              'The model stopped before answering — it used its whole output budget.',
+            toolsUsed,
+            rounds: round,
+            hitRoundLimit: false,
+            truncated: retry.finishReason === 'length',
+          }
+        } catch (err) {
+          if (!(err instanceof PaymentDeclinedError)) throw err
+          return {
+            answer: buildDeclinedAnswer(toolsUsed, err.message),
+            toolsUsed,
+            rounds: round,
+            hitRoundLimit: false,
+            truncated: false,
+            stoppedBySpendLimit: true,
+          }
+        }
+      }
       return {
         answer:
           turn.content.trim() ||
@@ -238,7 +322,8 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
   try {
     final = await opts.client.chat({
       model: opts.model,
-      maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      // Full budget: this is the answer the user reads.
+      maxTokens: budgetFor('final', opts),
       messages: [
         ...messages,
         {
