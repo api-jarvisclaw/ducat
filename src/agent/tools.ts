@@ -231,14 +231,17 @@ export const tools: Record<string, Tool> = {
         return `Resource ${resourceId} is not in the catalogue. It may have been withdrawn — search again rather than calling it.`
       }
 
-      const approved = await ctx.confirm({
-        toolName: 'call_api',
-        summary: `${detail.name} (${detail.serviceId}) ${args['method'] ?? detail.method}`,
-        priceUsd: detail.pricePerCall,
-      })
-      if (!approved) return DECLINED
-
-      ctx.log(`calling ${detail.name}…`)
+      // No confirmation here. The spend gate now sits at the payment layer, where it
+      // sees EVERY x402 charge rather than only the ones a tool remembered to wrap —
+      // which is what let six LLM turns at ~$0.21 past a $0.05 per-call limit.
+      //
+      // Asking here as well would charge the policy twice for one call (inflating the
+      // session total and prompting twice), and would ask about the CATALOGUE price
+      // while the gateway quotes its own. The quote is what gets signed, so the quote
+      // is what the user must be shown. The name and price read above still matter:
+      // they make the price in the prompt a live number and catch a withdrawn
+      // resource before any payment is attempted.
+      ctx.log(`calling ${detail.name} (about ${detail.pricePerCall.toFixed(5)} USD)…`)
       const result = await ctx.client.callApi({
         resourceId,
         ...(args['payload'] === undefined ? {} : { payload: args['payload'] }),

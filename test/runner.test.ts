@@ -1,4 +1,4 @@
-import { InsufficientBalanceError } from '@jarvisclaw-ai/sdk'
+import { InsufficientBalanceError, PaymentDeclinedError } from '@jarvisclaw-ai/sdk'
 import { describe, expect, it, vi } from 'vitest'
 import { DEFAULT_MAX_ROUNDS, run } from '../src/agent/runner.js'
 import { PlatformClient } from '../src/platform/client.js'
@@ -11,7 +11,7 @@ import { answerResponse, catalogueItem, toolCallResponse } from './helpers.js'
  */
 function stubAgentGateway(
   chatTurns: unknown[],
-  routes: Array<{ path: string; body: unknown; status?: number }> = [],
+  routes: Array<{ path: string; body?: unknown; status?: number; throws?: unknown }> = [],
 ) {
   const chatBodies: unknown[] = []
   const queue = [...chatTurns]
@@ -31,6 +31,9 @@ function stubAgentGateway(
 
     const route = routes.find((r) => href.includes(r.path))
     if (!route) throw new Error(`no route for ${href}`)
+    // A route may raise instead of answering, which is how a payment refusal now
+    // reaches the caller: the gate throws before the request is ever replayed.
+    if (route.throws) throw route.throws
     return new Response(JSON.stringify(route.body), {
       status: route.status ?? 200,
       headers: { 'content-type': 'application/json' },
@@ -43,7 +46,7 @@ function stubAgentGateway(
 async function runWith(
   chatTurns: unknown[],
   opts: {
-    routes?: Array<{ path: string; body: unknown; status?: number }>
+    routes?: Array<{ path: string; body?: unknown; status?: number; throws?: unknown }>
     approve?: boolean
     maxRounds?: number
   } = {},
@@ -251,21 +254,36 @@ describe('the agent loop', () => {
     ).rejects.toThrow(InsufficientBalanceError)
   })
 
-  it('does not spend when the user declines, and carries on', async () => {
+  // A declined charge now arrives as a thrown PaymentDeclinedError from the payment
+  // layer rather than as a false return from the tool's own confirm. The property
+  // under test is unchanged and still the important one: the refusal is reported TO
+  // THE MODEL as a tool result, so the loop carries on and the user gets an answer
+  // instead of a crash.
+  it('reports a declined charge to the model, and carries on', async () => {
+    const declined = new PaymentDeclinedError({
+      amountUsd: 0.5,
+      resourceUrl: 'https://gateway.test/v1/network/execute',
+      reason: 'above the per-call threshold',
+    })
     const { result, chatBodies } = await runWith(
       [toolCallResponse('call_api', { resource_id: 456 }), answerResponse('Not run, then.')],
       {
         routes: [
           { path: '/api/marketplace/apis/456', body: { data: catalogueItem() } },
-          { path: '/v1/network/execute', body: { should: 'never be reached' } },
+          { path: '/v1/network/execute', throws: declined },
         ],
-        approve: false,
       },
     )
     const second = chatBodies[1] as { messages: Array<Record<string, unknown>> }
-    expect(String(second.messages.find((m) => m['role'] === 'tool')?.['content'])).toMatch(
-      /declined/,
-    )
+    const toolResult = String(second.messages.find((m) => m['role'] === 'tool')?.['content'])
+
+    // Asserting more than /declined/ on purpose: the generic error fallthrough also
+    // contains that word, so a match on it alone passes even when the dedicated
+    // branch is removed. What distinguishes a decline from a fault is the framing —
+    // it is not reported as a failure, and the model is told what to do next.
+    expect(toolResult).toMatch(/was not run/)
+    expect(toolResult).toMatch(/Do not retry it/)
+    expect(toolResult).not.toMatch(/failed:/)
     expect(result.answer).toBe('Not run, then.')
   })
 

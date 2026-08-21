@@ -5,7 +5,7 @@
  * cycle the user never sees, so there is a hard cap on rounds and a per-session
  * spend ceiling that stops the loop rather than warning about it.
  */
-import { APIError, InsufficientBalanceError } from '@jarvisclaw-ai/sdk'
+import { APIError, InsufficientBalanceError, PaymentDeclinedError } from '@jarvisclaw-ai/sdk'
 import type { ChatMessage, PlatformClient } from '../platform/client.js'
 import { toolSchemas, tools, type ConfirmFn } from './tools.js'
 
@@ -65,6 +65,31 @@ export interface RunResult {
   hitRoundLimit: boolean
   /** True when the model hit its output budget instead of finishing. */
   truncated: boolean
+  /**
+   * True when a spend ceiling (or the user) declined a charge and ended the run.
+   *
+   * Reported separately from the other stop reasons because it is the only one the
+   * user chose: the answer is incomplete on purpose, and telling them to raise the
+   * limit is useful where "the model ran out of budget" would be misleading.
+   */
+  stoppedBySpendLimit?: boolean
+}
+
+/**
+ * What to say when a spend ceiling stopped the run.
+ *
+ * Names the work already done, because it was paid for: a bare "declined" hides the
+ * fact that the earlier rounds produced something.
+ */
+function buildDeclinedAnswer(toolsUsed: string[], detail: string): string {
+  const done =
+    toolsUsed.length > 0
+      ? ` Work completed before stopping: ${toolsUsed.join(', ')}.`
+      : ''
+  return (
+    `Stopped without finishing: the next step was declined (${detail}).${done} ` +
+    `Raise the ceiling with --max-spend or --max-call to continue.`
+  )
 }
 
 /**
@@ -138,12 +163,30 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
   const ctx = { client: opts.client, confirm: opts.confirm, log: opts.log }
 
   for (let round = 1; round <= maxRounds; round++) {
-    const turn = await opts.client.chat({
-      model: opts.model,
-      messages,
-      tools: schemas,
-      maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    })
+    let turn
+    try {
+      turn = await opts.client.chat({
+        model: opts.model,
+        messages,
+        tools: schemas,
+        maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      })
+    } catch (err) {
+      // The reasoning turn itself now passes the spend gate, so it can be declined —
+      // by the session limit or by the user. That is a stop, not a crash: report what
+      // the work already produced instead of throwing away the rounds paid for.
+      if (err instanceof PaymentDeclinedError) {
+        return {
+          answer: buildDeclinedAnswer(toolsUsed, err.message),
+          toolsUsed,
+          rounds: round,
+          hitRoundLimit: false,
+          truncated: false,
+          stoppedBySpendLimit: true,
+        }
+      }
+      throw err
+    }
 
     // A reasoning model that runs out of budget mid-thought returns prose and no
     // tool call, so the task silently becomes a description of what should have
@@ -191,19 +234,36 @@ export async function run(prompt: string, opts: RunnerOptions): Promise<RunResul
 
   // Out of rounds with tools still pending. Ask once more with tools withheld, so
   // the user gets an answer built from the work already done instead of nothing.
-  const final = await opts.client.chat({
-    model: opts.model,
-    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    messages: [
-      ...messages,
-      {
-        role: 'user',
-        content:
-          'Stop calling tools and answer now with what you have. Say plainly if the ' +
-          'task is unfinished and what remains.',
-      },
-    ],
-  })
+  let final
+  try {
+    final = await opts.client.chat({
+      model: opts.model,
+      maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      messages: [
+        ...messages,
+        {
+          role: 'user',
+          content:
+            'Stop calling tools and answer now with what you have. Say plainly if the ' +
+            'task is unfinished and what remains.',
+        },
+      ],
+    })
+  } catch (err) {
+    // This wrap-up turn costs money too, so the ceiling can land exactly here — the
+    // worst place to throw, since every round has already been paid for.
+    if (err instanceof PaymentDeclinedError) {
+      return {
+        answer: buildDeclinedAnswer(toolsUsed, err.message),
+        toolsUsed,
+        rounds: maxRounds,
+        hitRoundLimit: true,
+        truncated: false,
+        stoppedBySpendLimit: true,
+      }
+    }
+    throw err
+  }
   return {
     answer: final.content,
     toolsUsed,
@@ -258,6 +318,18 @@ async function runOneTool(
       // On a genuinely paid tool the user did approve a charge, so being out of
       // funds is terminal: every further attempt fails identically.
       throw err
+    }
+    // A declined charge is a decision, not a fault. The spend gate lives at the
+    // payment layer now, so a refusal arrives here as a thrown error rather than as
+    // a false return from the tool's own confirm — and it must not end the session:
+    // the model can still answer from what it has, or say plainly that the user
+    // declined. Rethrowing would abort a run the user only meant to keep cheap.
+    if (err instanceof PaymentDeclinedError) {
+      return (
+        `${call.name} was not run: the charge was declined (${err.message}). ` +
+        `Do not retry it. Tell the user plainly, and answer with what you already ` +
+        `have if you can.`
+      )
     }
     if (err instanceof APIError) {
       return `${call.name} failed: ${err.message} (HTTP ${err.statusCode}). Do not retry this unchanged.`

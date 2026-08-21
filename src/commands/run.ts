@@ -1,7 +1,7 @@
 /**
  * `jarvisclaw "<task>"` and the interactive session — the CLI's main path.
  */
-import { InsufficientBalanceError, JarvisClawError } from '@jarvisclaw-ai/sdk'
+import { InsufficientBalanceError, JarvisClawError, PaymentDeclinedError, type PaymentApprover } from '@jarvisclaw-ai/sdk'
 import { createInterface } from 'node:readline/promises'
 import { stdin, stdout } from 'node:process'
 import { run } from '../agent/runner.js'
@@ -26,6 +26,74 @@ function policyFor(config: ResolvedConfig): SpendPolicy {
  * Small calls go through silently but are always reported, so the user sees what
  * was spent without being asked six times about fractions of a cent.
  */
+/**
+ * Describe a charge the user did not explicitly ask for, from its URL.
+ *
+ * The gateway's own description is used when it sends one; this is the fallback, and
+ * it exists because "payment for /v1/chat/completions" means nothing to a beginner.
+ */
+function describeCharge(resourceUrl: string, description?: string): string {
+  if (description) return description
+  const path = (() => {
+    try {
+      return new URL(resourceUrl).pathname
+    } catch {
+      return resourceUrl
+    }
+  })()
+  if (path.includes('/chat/completions')) return 'a reasoning step (the agent thinking)'
+  if (path.includes('/embeddings')) return 'a catalogue lookup'
+  if (path.includes('/network/execute') || path.includes('/federation')) return 'an API call'
+  return path
+}
+
+/**
+ * The approval hook the SDK consults before signing ANY x402 payment.
+ *
+ * This is what makes the limits mean what they say. `SpendPolicy` was only ever
+ * consulted by the `call_api` tool, so it governed paid catalogue APIs and nothing
+ * else — and the agent's own reasoning turns, the most expensive part of a run, were
+ * outside it. A real run held `--max-call 0.05` and `--max-spend 1` and still spent
+ * $1.47, because six LLM turns quoted at ~$0.21 each never reached this policy.
+ *
+ * Wired at the payment layer rather than at each call site on purpose: a gate that
+ * has to be remembered at every call site is a gate that will be forgotten at the
+ * next one.
+ *
+ * The quoted amount is the amount charged — x402 prepays a fixed authorisation and
+ * never settles down to actual usage — so gating on the quote is gating on the money.
+ */
+function makeApprover(
+  policy: SpendPolicy,
+  log: (line: string) => void,
+): PaymentApprover {
+  return async (req) => {
+    const verdict = policy.evaluate(req.amountUsd)
+    const what = describeCharge(req.resourceUrl, req.description)
+
+    if (verdict.decision === 'deny') {
+      say()
+      say(`${style.yellow('!')} Declined ${formatPrice(req.amountUsd)} for ${what}`)
+      note(`  ${verdict.reason}`)
+      return { approved: false, reason: verdict.reason }
+    }
+
+    if (verdict.decision === 'allow') {
+      policy.record(req.amountUsd)
+      log(`paying ${formatPrice(req.amountUsd)} — ${what}`)
+      return true
+    }
+
+    say()
+    say(`${style.yellow('$')} ${what}`)
+    say(`  ${style.dim('cost')} ${formatPrice(req.amountUsd)}`)
+    note(`  ${verdict.reason}`)
+    const approved = await confirmYesNo('  Pay it?')
+    if (approved) policy.record(req.amountUsd)
+    return approved ? true : { approved: false, reason: 'you declined it' }
+  }
+}
+
 function makeConfirm(policy: SpendPolicy): { confirm: ConfirmFn; spentUsd: () => number } {
   const confirm: ConfirmFn = async ({ summary, priceUsd }) => {
     const verdict = policy.evaluate(priceUsd)
@@ -58,8 +126,6 @@ function makeConfirm(policy: SpendPolicy): { confirm: ConfirmFn; spentUsd: () =>
 
 /** Run one task and exit. */
 export async function runOnce(prompt: string, config: ResolvedConfig): Promise<number> {
-  const { client, model, anonymous, downgraded } = await buildRunClient(config)
-  if (anonymous) announceAnonymous(config.model, model, downgraded)
   const policy = policyFor(config)
   const { confirm, spentUsd } = makeConfirm(policy)
 
@@ -72,6 +138,14 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
     }
     note(`  ${line}`)
   }
+
+  // The approver is built before the client, because the client needs it: the gate
+  // lives on the payment path, so it has to exist by the time the first charge is
+  // quoted.
+  const { client, model, anonymous, downgraded } = await buildRunClient(config, {
+    approvePayment: makeApprover(policy, log),
+  })
+  if (anonymous) announceAnonymous(config.model, model, downgraded)
 
   try {
     const result = await run(prompt, { client, model, confirm, log, ...(anonymous ? { anonymous: true } : {}) })
@@ -88,7 +162,11 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
     if (result.truncated) {
       warn("The model ran out of output budget, so the answer above may be cut short.")
     }
-    if (result.hitRoundLimit) {
+    if (result.stoppedBySpendLimit) {
+      // Said explicitly rather than folded into the round-limit warning: this stop was
+      // the user's own ceiling doing its job, and the fix is a different one.
+      warn('A spend ceiling stopped this run before it finished.')
+    } else if (result.hitRoundLimit) {
       warn(`Stopped after ${result.rounds} rounds. The answer above may be incomplete.`)
     }
     return 0
@@ -100,9 +178,11 @@ export async function runOnce(prompt: string, config: ResolvedConfig): Promise<n
 
 /** Interactive session. Context carries across turns; spending does not reset. */
 export async function runInteractive(config: ResolvedConfig): Promise<number> {
-  const { client, model, anonymous, downgraded } = await buildRunClient(config)
   const policy = policyFor(config)
   const { confirm, spentUsd } = makeConfirm(policy)
+  const { client, model, anonymous, downgraded } = await buildRunClient(config, {
+    approvePayment: makeApprover(policy, (line) => note(`  ${line}`)),
+  })
 
   say(`${style.bold('jarvisclaw')} ${style.dim(`· ${model} · ${config.baseUrl}`)}`)
   if (anonymous) {
