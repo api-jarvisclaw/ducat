@@ -1,0 +1,51 @@
+name: npm auth check
+
+# Diagnostic only. Answers one question the publish workflow cannot: is NPMSECRET
+# ACTUALLY AUTHORIZED to publish this package, or merely present?
+#
+# The publish of v0.1.3 failed with `404 Not Found - PUT .../jarvisclaw`, which npm
+# returns for an existing package when the credential lacks write access — the same
+# body it returns for a package that does not exist. Everything before it passed,
+# including a step that printed "npm credential present (40 chars)". A non-empty
+# string is not an authorized one, so that step's success proved nothing about auth.
+#
+# `npm whoami` and `npm access` reveal only the account name and the package list,
+# never the token. Run manually; delete once the answer is known.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Is the credential valid at all?
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPMSECRET }}
+        run: |
+          echo "token length: ${#NODE_AUTH_TOKEN}"
+          echo "--- npm whoami (account name only) ---"
+          npm whoami || echo "WHOAMI FAILED — the credential is not valid"
+
+      - name: Does it have write access to this package?
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPMSECRET }}
+        run: |
+          echo "--- npm access list packages (what this token may write) ---"
+          npm access list packages 2>&1 | head -20 || echo "ACCESS LIST FAILED"
+          echo "--- npm owner ls jarvisclaw ---"
+          npm owner ls jarvisclaw 2>&1 | head -10 || echo "OWNER LS FAILED"
+
+      - name: What does a dry-run publish say?
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPMSECRET }}
+        run: |
+          npm install
+          npm run build
+          echo "--- npm publish --dry-run ---"
+          npm publish --access public --dry-run 2>&1 | tail -20
