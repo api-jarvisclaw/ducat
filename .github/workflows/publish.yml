@@ -64,18 +64,36 @@ jobs:
           esac
           echo "sdk dependency is $DEP"
 
-      - name: Check the npm credential is present
-        # An absent secret is an empty string, not an error, so npm publish would
-        # fail as a confusing 401/ENEEDAUTH rather than saying what is missing.
-        # Only the length is printed — never the value.
+      - name: Check the npm credential is AUTHORIZED, not merely present
+        # The previous version of this step only tested that the secret was non-empty and
+        # printed "npm credential present (40 chars)". A non-empty string is not an
+        # authorized one, so the step passed and the publish then failed with
+        #
+        #   404 Not Found - PUT https://registry.npmjs.org/jarvisclaw
+        #
+        # npm answers 404 rather than 401 for an unauthorized write to an EXISTING package,
+        # so it looks like the package is missing. It is not — `npm owner ls jarvisclaw`
+        # succeeds (anonymously, which is why that is no evidence either). The credential was
+        # revoked: `npm whoami` answers 401 with this token, and with ts-sdk's copy too, both
+        # of which are 40 chars — the legacy token length, and npm has been retiring those.
+        #
+        # So the check asks the registry. `npm whoami` is the cheapest authenticated call
+        # there is and it prints only the account name, never the token.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPMSECRET }}
         run: |
           if [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::the NPMSECRET repository secret is empty or unset — set it with: gh secret set NPMSECRET --repo api-jarvisclaw/jarvisclaw-cli"
+            echo "::error::the NPMSECRET repository secret is empty or unset — set it with: gh secret set NPMSECRET --repo api-jarvisclaw/ducat"
             exit 1
           fi
-          echo "npm credential present (${#NODE_AUTH_TOKEN} chars)"
+          echo "npm credential present (${#NODE_AUTH_TOKEN} chars) — now asking the registry"
+          if ! WHO=$(npm whoami 2>&1); then
+            echo "::error::NPMSECRET is present but the registry rejects it: $WHO"
+            echo "::error::Publishing would fail as a misleading 404 on PUT. Replace the token:"
+            echo "::error::  gh secret set NPMSECRET --repo api-jarvisclaw/ducat"
+            exit 1
+          fi
+          echo "authorized as: $WHO"
 
       - name: Publish
         # --access public is required, not merely conventional: npm treats a package
