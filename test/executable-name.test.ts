@@ -109,3 +109,57 @@ describe('the executable name', () => {
     expect(hint).toContain(`${BIN} --help`)
   })
 })
+
+/**
+ * `--version` must report the version that was actually published.
+ *
+ * It did not. The 0.1.2 release bumped `package.json` alone, so the constant in
+ * main.ts stayed at 0.1.1 and the published 0.1.2 answered `--version` with `0.1.1`.
+ * Verified by installing jarvisclaw@0.1.2 from npm into a clean directory: the binary
+ * reports 0.1.1.
+ *
+ * That is worse than cosmetic. The version string is what a user pastes into a bug
+ * report and what anyone diagnosing a fix asks for first, so this makes a shipped fix
+ * look absent — for 0.1.2 specifically, the spend-ceiling fix that stops a session
+ * overspending. "Are you on 0.1.2?" was unanswerable from the tool itself.
+ *
+ * Nothing caught it because no test read the constant: the release ritual is a
+ * one-line package.json edit, and a second copy of the same fact does not get edited
+ * by a ritual that does not mention it. The fix is to stop having a second copy — and
+ * to assert that no new one appears.
+ */
+describe('the reported version', () => {
+  it('is the version package.json declares', async () => {
+    const { VERSION } = await import('../src/main.js')
+    expect(VERSION, 'src/main.ts drifted from package.json — a release bumped one, not both')
+      .toBe(pkg.version)
+  })
+
+  it('is not written out as a literal anywhere under src/', () => {
+    // The real defect was a hand-maintained duplicate, so the durable guard is that
+    // the number exists in exactly one place. A version-shaped literal in source is
+    // that duplicate reappearing, whether or not it currently matches.
+    const offenders: string[] = []
+    for (const file of sourceFiles('src')) {
+      readFileSync(file, 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          // Comments are exempt. The note explaining THIS defect necessarily quotes the
+          // two versions that drifted, and a guard that forbids describing the bug it
+          // guards against would be paid for by deleting the explanation. Code is what
+          // ships; prose cannot drift into `--version` output.
+          // `.trimEnd()` first: these files are checked out with CRLF on Windows, and a
+          // trailing \r sits between the text and the `$` anchor, so `^\s*\*.*$` matched
+          // nothing and every JSDoc line was scanned as if it were code.
+          const code = line
+            .trimEnd()
+            .replace(/\/\/.*$/, '')
+            .replace(/^\s*\*.*$/, '')
+            .replace(/\/\*.*?\*\//g, '')
+          // Only quoted, standalone semver — so a URL path or a date is not matched.
+          if (/['"`]\d+\.\d+\.\d+['"`]/.test(code)) offenders.push(`${file}:${i + 1}: ${line.trim()}`)
+        })
+    }
+    expect(offenders, 'hardcoded version literal; read it from package.json instead').toEqual([])
+  })
+})

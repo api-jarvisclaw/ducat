@@ -7,8 +7,23 @@ import { wallet } from './commands/wallet.js'
 import { runInteractive, runOnce } from './commands/run.js'
 import { resolveConfig } from './config.js'
 import { note, say, style } from './ui.js'
+import pkg from '../package.json' with { type: 'json' }
 
-const VERSION = '0.1.1'
+/**
+ * Read from package.json rather than restated here.
+ *
+ * A hand-maintained copy drifted: the 0.1.2 release bumped package.json only, so the
+ * published 0.1.2 answered `--version` with `0.1.1`. That makes a shipped fix look
+ * absent to the one question anyone diagnosing it asks first — for 0.1.2 that was the
+ * spend-ceiling fix, so "are you on the version that stops overspending?" could not be
+ * answered from the tool.
+ *
+ * tsup inlines this import at build time, so the published bundle carries the literal
+ * and does not read a file at runtime — which matters because `files` ships `dist`
+ * only, and a runtime read would look for a package.json that is present for the
+ * installed package but at a path relative to the bundle, not the CWD.
+ */
+export const VERSION: string = pkg.version
 
 /** Run one invocation and return the process exit code. Never calls process.exit. */
 export async function main(argv: string[]): Promise<number> {
